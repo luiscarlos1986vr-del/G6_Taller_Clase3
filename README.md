@@ -57,6 +57,7 @@ pip install -r requirements.txt
 pandas==2.2.2
 numpy==2.2.2
 openpyxl==3.1.5
+jupyter
 ```
 
 ---
