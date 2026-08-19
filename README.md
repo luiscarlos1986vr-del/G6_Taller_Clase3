@@ -32,13 +32,14 @@ G6_Taller_Clase3/
 │       ├── resumen_analitico_YYYYMMDD.*
 │       ├── indicadores_calidad_YYYYMMDD.csv
 │       └── huerfanos_YYYYMMDD.csv (si existen)
-├── taller_3_G6.ipynb            # Script principal
+├── Taller_3_G6.ipynb            # Notebook interactivo
+├── taller_3_g6.py               # Script ejecutable
 ├── requirements.txt             # Dependencias
 ├── .gitignore                   # Archivos y carpetas a ignorar
 └── README.md                    # Este archivo
 ```
 
-> **Nota:** Los archivos en `data/raw/` **no se suben al repositorio** (están en `.gitignore`). Cada usuario debe colocar allí los datos originales antes de ejecutar el script.
+> **Nota:** Los archivos fuente originales (.csv y .xlsx) se encuentran en la raíz del repositorio. Al ejecutar el script, este se encarga automáticamente de crear la carpeta data/raw/ y copiar los insumos allí para mantener la estructura analítica limpia.
 
 ---
 
@@ -67,7 +68,7 @@ jupyter
 ### Opción 1: Script Python (recomendado para producción)
 
 ```bash
-python taller_3_G6.py
+python taller_3_g6.py
 ```
 
 ### Opción 2: Notebook Jupyter/Colab
@@ -75,8 +76,8 @@ python taller_3_G6.py
 Abre el archivo `Taller_3_G6.ipynb` en Google Colab o en Jupyter y ejecuta las celdas en orden.
 
 **Para Colab:**
-- Monta Google Drive y copia los datos a `data/raw/` o súbelos manualmente.
-- El script creará automáticamente las carpetas necesarias.
+- Clona este repositorio o sube los archivos de la raíz (`.csv`, `.xlsx` y `Taller_3_G6.ipynb`) al entorno de Colab.
+- Al ejecutar las celdas, el código creará automáticamente la estructura de carpetas (`data/raw/` y `data/processed/`) y procesará los datos.
 
 ---
 
