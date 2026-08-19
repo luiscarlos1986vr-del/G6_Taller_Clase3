@@ -32,7 +32,7 @@ G6_Taller_Clase3/
 │       ├── resumen_analitico_YYYYMMDD.*
 │       ├── indicadores_calidad_YYYYMMDD.csv
 │       └── huerfanos_YYYYMMDD.csv (si existen)
-├── taller_analitico.py          # Script principal (o el notebook .ipynb)
+├── Taller_3_G6.ipynb            # Script principal
 ├── requirements.txt             # Dependencias
 ├── .gitignore                   # Archivos y carpetas a ignorar
 └── README.md                    # Este archivo
@@ -66,7 +66,7 @@ openpyxl==3.1.5
 ### Opción 1: Script Python (recomendado para producción)
 
 ```bash
-python taller_analitico.py
+python Taller_3_G6.py
 ```
 
 ### Opción 2: Notebook Jupyter/Colab
