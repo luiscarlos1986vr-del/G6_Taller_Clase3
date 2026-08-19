@@ -31,6 +31,7 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 import warnings
+import shutil
 warnings.filterwarnings('ignore')
 
 print('--- ENTORNO ---')
@@ -99,7 +100,6 @@ print('leer_archivo_seguro, validar_columnas, detectar_duplicados, contar_nulos'
 
 #? Copiamos los archivos fuente al directorio raw para garantizar trazabilidad.
 #  Esto asegura que los datos originales estén dentro del proyecto.
-import shutil
 
 # Archivos fuente requeridos para el análisis
 archivos_fuente = {
