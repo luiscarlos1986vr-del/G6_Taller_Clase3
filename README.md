@@ -32,7 +32,7 @@ G6_Taller_Clase3/
 │       ├── resumen_analitico_YYYYMMDD.*
 │       ├── indicadores_calidad_YYYYMMDD.csv
 │       └── huerfanos_YYYYMMDD.csv (si existen)
-├── Taller_3_G6.ipynb            # Script principal
+├── taller_3_G6.ipynb            # Script principal
 ├── requirements.txt             # Dependencias
 ├── .gitignore                   # Archivos y carpetas a ignorar
 └── README.md                    # Este archivo
@@ -67,7 +67,7 @@ jupyter
 ### Opción 1: Script Python (recomendado para producción)
 
 ```bash
-python Taller_3_G6.py
+python taller_3_G6.py
 ```
 
 ### Opción 2: Notebook Jupyter/Colab
