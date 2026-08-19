@@ -1,0 +1,6 @@
+# Dependencias del proyecto para el Taller Práctico - Flujo Analítico Reproducible
+# Generado con Python 3.12+
+
+pandas==2.2.2
+numpy==2.2.2
+openpyxl==3.1.5
