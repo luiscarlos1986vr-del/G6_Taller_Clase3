@@ -7,7 +7,7 @@ on:
     branches: [ "Luis" ]
 
 env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # <--- Línea nueva
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Forzar Node.js 24
 
 permissions:
   contents: read
