@@ -381,7 +381,9 @@ for fmt, method in [('csv', 'to_csv'), ('json', 'to_json'), ('xlsx', 'to_excel')
 logger.info('--- EXPORTACIÓN ---')
 for a in archivos_exportados:
     logger.info(f'   ✓ {a}')
-logger.info(f'\n   Total archivos generados: {len(archivos_exportados) + 2}')  # +2: huérfanos + indicadores
+
+total_archivos = len(archivos_exportados) + 2  # +2: huérfanos + indicadores
+logger.info(f'\n   Total archivos generados: {total_archivos}')
 
 
 # Verificar umbrales de calidad
