@@ -33,6 +33,7 @@ from datetime import datetime
 import warnings
 import shutil
 import logging
+import json
 warnings.filterwarnings('ignore')
 
 #? Configuración de logging: reemplaza print() para auditoría y trazabilidad.
@@ -52,6 +53,15 @@ logger.info('--- ENTORNO ---')
 logger.info(f'Python: {sys.version.split()[0]}')
 logger.info(f'Pandas: {pd.__version__}')
 logger.info(f'Numpy:  {np.__version__}')
+
+
+#? Cargar configuración desde archivo JSON
+with open('config.json', 'r', encoding='utf-8') as f:
+    CONFIG = json.load(f)
+logger.info('--- CONFIGURACIÓN CARGADA ---')
+logger.info(f'Columnas: {list(CONFIG["columnas"].keys())}')
+logger.info(f'Umbrales: {CONFIG["umbrales"]}')
+
 
 
 """### 1.2 Arquitectura de carpetas"""
@@ -118,9 +128,9 @@ logger.info('leer_archivo_seguro, validar_columnas, detectar_duplicados, contar_
 
 # Archivos fuente requeridos para el análisis
 archivos_fuente = {
-    'entregas_campus_matriz.csv': BASE_DIR / 'entregas_campus_matriz.csv',
-    'entregas_campus_extension.csv': BASE_DIR / 'entregas_campus_extension.csv',
-    'estudiantes_master.xlsx': BASE_DIR / 'estudiantes_master.xlsx',
+    CONFIG['archivos']['matriz']: BASE_DIR / CONFIG['archivos']['matriz'],
+    CONFIG['archivos']['extension']: BASE_DIR / CONFIG['archivos']['extension'],
+    CONFIG['archivos']['catalogo']: BASE_DIR / CONFIG['archivos']['catalogo'],
 }
 
 print('--- COPIADO DE ARCHIVOS A RAW ---')
@@ -154,7 +164,7 @@ except Exception:
         dtype={'id_estudiante': str}
     )
 
-columnas_catalogo = ['id_estudiante', 'nombre_completo', 'campus_origen']
+columnas_catalogo = CONFIG['columnas']['catalogo']
 validar_columnas(df_catalogo, columnas_catalogo, 'Catálogo')
 
 #? Eliminamos duplicados en la llave primaria antes del merge.
@@ -175,8 +185,7 @@ df_extension = leer_archivo_seguro(
     dtype={'id_entrega': str, 'id_estudiante': str}
 )
 
-columnas_entregas = ['id_entrega', 'id_estudiante', 'fecha_subida',
-                     'materia', 'tipo_proyecto', 'puntaje_obtenido', 'estado_entrega']
+columnas_entregas = CONFIG['columnas']['entregas']
 validar_columnas(df_matriz, columnas_entregas, 'Matriz')
 validar_columnas(df_extension, columnas_entregas, 'Extensión')
 
@@ -373,6 +382,11 @@ logger.info('--- EXPORTACIÓN ---')
 for a in archivos_exportados:
     logger.info(f'   ✓ {a}')
 logger.info(f'\n   Total archivos generados: {len(archivos_exportados) + 2}')  # +2: huérfanos + indicadores
+
+
+# Verificar umbrales de calidad
+if nulos_puntaje > CONFIG['umbrales']['nulos_maximos_puntaje']:
+    logger.warning(f'ALERTA: Nulos en puntaje ({nulos_puntaje}) excede el umbral ({CONFIG["umbrales"]["nulos_maximos_puntaje"]})')
 
 """### 2.9 Estrategia de reproducibilidad"""
 
