@@ -1,0 +1,15 @@
+{
+    "columnas": {
+        "catalogo": ["id_estudiante", "nombre_completo", "campus_origen"],
+        "entregas": ["id_entrega", "id_estudiante", "fecha_subida", "materia", "tipo_proyecto", "puntaje_obtenido", "estado_entrega"]
+    },
+    "umbrales": {
+        "nulos_maximos_puntaje": 10,
+        "porcentaje_huerfanos_maximo": 5.0
+    },
+    "archivos": {
+        "catalogo": "estudiantes_master.xlsx",
+        "matriz": "entregas_campus_matriz.csv",
+        "extension": "entregas_campus_extension.csv"
+    }
+}
