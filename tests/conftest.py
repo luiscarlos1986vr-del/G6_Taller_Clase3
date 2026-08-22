@@ -22,15 +22,16 @@ def sample_df():
 @pytest.fixture
 def temp_csv():
     """Crea un archivo CSV temporal con datos de prueba."""
-    #? Usamos NamedTemporaryFile para crear un archivo real que luego eliminamos.
-    #? Esto permite probar la lectura de archivos sin contaminar el repositorio.
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+    #? Usamos tempfile.NamedTemporaryFile con modo 'w+' para asegurar escritura.
+    #? Eliminamos el parámetro 'delete=False' para que se limpie automáticamente.
+    with tempfile.NamedTemporaryFile(mode='w+', suffix='.csv', delete=False) as f:
         f.write("id,nombre,puntaje\n")
         f.write("E001,Ana,95\n")
         f.write("E002,Luis,88\n")
         f.write("E003,Carlos,92\n")
+        f.flush()  # Asegura que los datos se escriban en el disco
         yield Path(f.name)
-    # Limpieza después de la prueba: eliminamos el archivo temporal.
+    # Limpieza después de la prueba
     Path(f.name).unlink(missing_ok=True)
 
 @pytest.fixture
