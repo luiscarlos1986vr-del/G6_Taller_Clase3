@@ -136,7 +136,7 @@ Todos los archivos se guardan en `data/processed/` con un sufijo de fecha (YYYYM
 
 ---
 
-## 📧 Contacto
+## 📧 Contacto ##
 
 Para dudas o sugerencias, abrir un *issue* en el repositorio o contactar a los integrantes del equipo.
 
