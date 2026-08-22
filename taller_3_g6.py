@@ -32,12 +32,27 @@ from pathlib import Path
 from datetime import datetime
 import warnings
 import shutil
+import logging
 warnings.filterwarnings('ignore')
 
-print('--- ENTORNO ---')
-print(f'Python: {sys.version.split()[0]}')
-print(f'Pandas: {pd.__version__}')
-print(f'Numpy:  {np.__version__}')
+#? Configuración de logging: reemplaza print() para auditoría y trazabilidad.
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('pipeline.log'),  # Persistencia: archivo de log.
+        logging.StreamHandler()               # Visualización: consola.
+    ]
+)
+logger = logging.getLogger(__name__)
+
+warnings.filterwarnings('ignore')
+
+logger.info('--- ENTORNO ---')
+logger.info(f'Python: {sys.version.split()[0]}')
+logger.info(f'Pandas: {pd.__version__}')
+logger.info(f'Numpy:  {np.__version__}')
+
 
 """### 1.2 Arquitectura de carpetas"""
 
@@ -50,9 +65,9 @@ PROCESSED_DIR = BASE_DIR / 'data' / 'processed'
 for directorio in [RAW_DIR, PROCESSED_DIR]:
     directorio.mkdir(parents=True, exist_ok=True)
 
-print('--- ESTRUCTURA ---')
-print(f'Raw:       {RAW_DIR}')
-print(f'Processed: {PROCESSED_DIR}')
+logger.info('--- ESTRUCTURA ---')
+logger.info(f'Raw:       {RAW_DIR}')
+logger.info(f'Processed: {PROCESSED_DIR}')
 
 """### 1.3 Funciones reutilizables"""
 
@@ -95,8 +110,8 @@ def contar_nulos(df, columna, nombre_df='DataFrame'):
     print(f'   {nombre_df} → {columna}: {n} nulos ({pct:.1f}%)')
     return n
 
-print('--- FUNCIONES CARGADAS ---')
-print('leer_archivo_seguro, validar_columnas, detectar_duplicados, contar_nulos')
+logger.info('--- FUNCIONES CARGADAS ---')
+logger.info('leer_archivo_seguro, validar_columnas, detectar_duplicados, contar_nulos')
 
 #? Copiamos los archivos fuente al directorio raw para garantizar trazabilidad.
 #  Esto asegura que los datos originales estén dentro del proyecto.
@@ -124,7 +139,7 @@ print('--- FIN COPIADO ---')
 #? Forzamos dtype str en IDs para evitar que pandas los interprete como numéricos y pierda ceros.
 #? Fallback CSV → si el Excel está corrupto el flujo no se detiene.
 
-print('--- CARGA DE DATOS ---')
+logger.info('--- CARGA DE DATOS ---')
 
 # Catálogo maestro (Excel)
 ruta_catalogo = RAW_DIR / 'estudiantes_master.xlsx'
@@ -144,7 +159,7 @@ validar_columnas(df_catalogo, columnas_catalogo, 'Catálogo')
 
 #? Eliminamos duplicados en la llave primaria antes del merge.
 df_catalogo_limpio = df_catalogo.drop_duplicates(subset=['id_estudiante'])
-print(f'   Catálogo: {len(df_catalogo)} → {len(df_catalogo_limpio)} (sin duplicados)')
+logger.info(f'   Catálogo: {len(df_catalogo)} → {len(df_catalogo_limpio)} (sin duplicados)')
 
 # Entregas campus Matriz (CSV)
 df_matriz = leer_archivo_seguro(
@@ -185,8 +200,8 @@ df_consolidado = pd.concat(
 #? Verificamos que no haya IDs de entrega repetidos entre campus.
 detectar_duplicados(df_consolidado, subset=['id_entrega'], nombre_df='Consolidado')
 
-print(f'\n--- CONCAT ---')
-print(f'Matriz ({len(df_matriz)}) + Extensión ({len(df_extension)}) = {len(df_consolidado)} registros')
+logger.info(f'\n--- CONCAT ---')
+logger.info(f'Matriz ({len(df_matriz)}) + Extensión ({len(df_extension)}) = {len(df_consolidado)} registros')
 
 """### 2.3 Integración relacional (merge)"""
 
@@ -203,12 +218,12 @@ df_integrado = pd.merge(
     indicator=True
 )
 
-print('--- MERGE ---')
-print(df_integrado['_merge'].value_counts().to_string())
+logger.info('--- MERGE ---')
+logger.info(df_integrado['_merge'].value_counts().to_string())
 
 #? Huérfanos = entregas de estudiantes no matriculados. Los exportamos para auditoría.
 df_huerfanos = df_integrado[df_integrado['_merge'] == 'left_only']
-print(f'\nHuérfanos: {len(df_huerfanos)} ({len(df_huerfanos)/len(df_integrado)*100:.1f}%)')
+logger.info(f'\nHuérfanos: {len(df_huerfanos)} ({len(df_huerfanos)/len(df_integrado)*100:.1f}%)')
 
 if len(df_huerfanos) > 0:
     archivo_huerfanos = PROCESSED_DIR / f'huerfanos_{datetime.now().strftime("%Y%m%d")}.csv'
@@ -235,8 +250,16 @@ revision_sin_nota = df_integrado[
     (df_integrado['puntaje_obtenido'].isna())
 ]
 
-print(f'   Pendiente CON puntaje (inconsistente): {len(pendiente_con_nota)}')
-print(f'   Revisión SIN puntaje (inconsistente):  {len(revision_sin_nota)}')
+if len(pendiente_con_nota) > 0:
+    logger.warning(f'   Pendiente CON puntaje (inconsistente): {len(pendiente_con_nota)}')
+else:
+    logger.info(f'   Pendiente CON puntaje (inconsistente): {len(pendiente_con_nota)}')
+
+if len(revision_sin_nota) > 0:
+    logger.warning(f'   Revisión SIN puntaje (inconsistente): {len(revision_sin_nota)}')
+else:
+    logger.info(f'   Revisión SIN puntaje (inconsistente): {len(revision_sin_nota)}')
+
 
 """### 2.5 Análisis exploratorio y agregaciones"""
 
@@ -307,14 +330,14 @@ indicadores = {
     'archivos_generados': 0  # se actualiza abajo
 }
 
-print('--- INDICADORES DE CALIDAD ---')
+logger.info('--- INDICADORES DE CALIDAD ---')
 for k, v in indicadores.items():
-    print(f'   {k:.<40} {v}')
+    logger.info(f'   {k:.<40} {v}')
 
 df_indicadores = pd.DataFrame([indicadores])
 nombre_ind = PROCESSED_DIR / f'indicadores_calidad_{datetime.now().strftime("%Y%m%d")}.csv'
 df_indicadores.to_csv(nombre_ind, index=False)
-print(f'\n   Exportado → {nombre_ind.name}')
+logger.info(f'\n   Exportado → {nombre_ind.name}')
 
 """### 2.8 Exportación de datos finales"""
 
@@ -346,10 +369,10 @@ for fmt, method in [('csv', 'to_csv'), ('json', 'to_json'), ('xlsx', 'to_excel')
         resumen_final.to_csv(nombre, index=False)
     archivos_exportados.append(nombre.name)
 
-print('--- EXPORTACIÓN ---')
+logger.info('--- EXPORTACIÓN ---')
 for a in archivos_exportados:
-    print(f'   ✓ {a}')
-print(f'\n   Total archivos generados: {len(archivos_exportados) + 2}')  # +2: huérfanos + indicadores
+    logger.info(f'   ✓ {a}')
+logger.info(f'\n   Total archivos generados: {len(archivos_exportados) + 2}')  # +2: huérfanos + indicadores
 
 """### 2.9 Estrategia de reproducibilidad"""
 
