@@ -138,6 +138,8 @@ Todos los archivos se guardan en `data/processed/` con un sufijo de fecha (YYYYM
 
 ## 📧 Contacto ##
 
+- Activando GitHub Actions para pruebas automáticas.
+
 Para dudas o sugerencias, abrir un *issue* en el repositorio o contactar a los integrantes del equipo.
 
 ---
