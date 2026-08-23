@@ -1,1265 +1,635 @@
-{
-  "cells": [
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "HW0Z_y55lQtn"
-      },
-      "source": [
-        "# TALLER 3 — FLUJO ANALÍTICO REPRODUCIBLE\n",
-        "\n",
-        "### Requisito:\n",
-        "La calificación del Taller Práctico está condicionada a la entrega previa del vídeo semanal.\n",
-        "\n",
-        "### Reto\n",
-        "Diseñar un flujo analítico reproducible.\n",
-        "\n",
-        "### Objetivo y alcance del reto:\n",
-        "Transformar un proceso manual de consolidación de datos en un flujo reproducible. Se aplica agrupamiento, agregación, combinación de datasets, automatización de archivos, gestión de entornos, organización de proyectos y control de versiones.\n",
-        "\n",
-        "### Modalidad del entregable:\n",
-        "Escrito — permite documentar decisiones técnicas, justificar criterios de reproducibilidad, presentar la estructura del proyecto y explicar validaciones de forma ordenada."
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "vodlsALulQto"
-      },
-      "source": [
-        "### 1.1 Configuración del entorno"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 14,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "yEqGsibjlQtp",
-        "outputId": "f4f7dfc4-d8c2-419b-9775-3a87ff8e408d"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,401 | INFO     | === INICIO DEL PIPELINE ===\n",
-            "2026-08-22 22:07:40,402 | INFO     | Proyecto: Taller 3 - Flujo Analítico Reproducible v2.0\n",
-            "2026-08-22 22:07:40,402 | INFO     | Python: 3.12.0\n",
-            "2026-08-22 22:07:40,403 | INFO     | Pandas: 3.0.5\n",
-            "2026-08-22 22:07:40,403 | INFO     | Numpy:  2.5.2\n",
-            "2026-08-22 22:07:40,404 | INFO     | Configuración cargada desde: config.json\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Importamos las dependencias mínimas para el flujo completo.\n",
-        "#? sys: verificar versión de Python; pathlib: rutas portables; datetime: sellos de tiempo en exports.\n",
-        "#? logging: sistema formal de registro de eventos; json: carga de configuración externa.\n",
-        "import sys\n",
-        "import json\n",
-        "import logging\n",
-        "import pandas as pd\n",
-        "import numpy as np\n",
-        "from pathlib import Path\n",
-        "from datetime import datetime\n",
-        "import warnings\n",
-        "import shutil\n",
-        "warnings.filterwarnings('ignore')\n",
-        "\n",
-        "# --- LOGGING: Sistema formal de registro de eventos ---\n",
-        "#? Reemplazamos prints por logging para control de niveles y persistencia en archivo.\n",
-        "LOG_DIR = Path.cwd() / 'logs'\n",
-        "LOG_DIR.mkdir(parents=True, exist_ok=True)\n",
-        "\n",
-        "logging.basicConfig(\n",
-        "    level=logging.INFO,\n",
-        "    format='%(asctime)s | %(levelname)-8s | %(message)s',\n",
-        "    handlers=[\n",
-        "        logging.StreamHandler(),\n",
-        "        logging.FileHandler(LOG_DIR / 'pipeline.log', mode='w', encoding='utf-8')\n",
-        "    ]\n",
-        ")\n",
-        "logger = logging.getLogger(__name__)\n",
-        "\n",
-        "# --- CONFIGURACIÓN EXTERNA: Parámetros centralizados ---\n",
-        "#? Cargamos parámetros desde config.json para evitar valores hardcodeados.\n",
-        "CONFIG_PATH = Path.cwd() / 'config.json'\n",
-        "with open(CONFIG_PATH, 'r', encoding='utf-8') as f:\n",
-        "    CONFIG = json.load(f)\n",
-        "\n",
-        "logger.info('=== INICIO DEL PIPELINE ===')\n",
-        "logger.info(f'Proyecto: {CONFIG[\"proyecto\"]} v{CONFIG[\"version\"]}')\n",
-        "logger.info(f'Python: {sys.version.split()[0]}')\n",
-        "logger.info(f'Pandas: {pd.__version__}')\n",
-        "logger.info(f'Numpy:  {np.__version__}')\n",
-        "logger.info(f'Configuración cargada desde: {CONFIG_PATH.name}')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "ClcutPJilQtp"
-      },
-      "source": [
-        "### 1.2 Arquitectura de carpetas"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 15,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "HMaqNa6hlQtp",
-        "outputId": "d9407f32-047e-4c51-83dc-8810c8fa4667"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,411 | INFO     | --- ESTRUCTURA DE CARPETAS ---\n",
-            "2026-08-22 22:07:40,411 | INFO     | Raw:       /Users/josias.pina/G6_Taller_Clase3/data/raw\n",
-            "2026-08-22 22:07:40,412 | INFO     | Processed: /Users/josias.pina/G6_Taller_Clase3/data/processed\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Rutas definidas en config.json: el proyecto corre en cualquier máquina sin editar paths.\n",
-        "#? Separamos raw (intocable) de processed (generado) para trazabilidad.\n",
-        "BASE_DIR = Path.cwd()\n",
-        "RAW_DIR = BASE_DIR / CONFIG['rutas']['raw']\n",
-        "PROCESSED_DIR = BASE_DIR / CONFIG['rutas']['processed']\n",
-        "\n",
-        "for directorio in [RAW_DIR, PROCESSED_DIR]:\n",
-        "    directorio.mkdir(parents=True, exist_ok=True)\n",
-        "\n",
-        "logger.info('--- ESTRUCTURA DE CARPETAS ---')\n",
-        "logger.info(f'Raw:       {RAW_DIR}')\n",
-        "logger.info(f'Processed: {PROCESSED_DIR}')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "wOsCxwPLlQtq"
-      },
-      "source": [
-        "### 1.3 Funciones reutilizables"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 16,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "taTH5UITlQtq",
-        "outputId": "8f0c9fa5-3c39-4666-fc03-753c17883798"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,420 | INFO     | --- FUNCIONES CARGADAS ---\n",
-            "2026-08-22 22:07:40,422 | INFO     | leer_archivo_seguro, validar_columnas, detectar_duplicados, contar_nulos\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Centralizamos lógica repetitiva en funciones para no duplicar código entre secciones.\n",
-        "#? Cada función encapsula una validación que se aplica a múltiples DataFrames.\n",
-        "\n",
-        "def leer_archivo_seguro(ruta, tipo='csv', **kwargs):\n",
-        "    \"\"\"Lee CSV, Excel o JSON de forma robusta con logging.\"\"\"\n",
-        "    try:\n",
-        "        if tipo == 'csv':\n",
-        "            df = pd.read_csv(ruta, **kwargs)\n",
-        "        elif tipo == 'excel':\n",
-        "            df = pd.read_excel(ruta, **kwargs)\n",
-        "        elif tipo == 'json':\n",
-        "            df = pd.read_json(ruta, **kwargs)\n",
-        "        else:\n",
-        "            raise ValueError(f'Tipo no soportado: {tipo}')\n",
-        "        logger.info(f'Archivo leído: {Path(ruta).name} ({len(df)} filas, {len(df.columns)} cols)')\n",
-        "        return df\n",
-        "    except Exception as e:\n",
-        "        logger.error(f'Error leyendo {ruta}: {e}')\n",
-        "        raise\n",
-        "\n",
-        "\n",
-        "def validar_columnas(df, columnas_requeridas, nombre_df='DataFrame'):\n",
-        "    \"\"\"Falla temprano si faltan columnas esperadas.\"\"\"\n",
-        "    faltantes = [c for c in columnas_requeridas if c not in df.columns]\n",
-        "    if faltantes:\n",
-        "        logger.error(f'{nombre_df} sin columnas: {faltantes}')\n",
-        "        raise ValueError(f'{nombre_df} sin columnas: {faltantes}')\n",
-        "    logger.info(f'   \\u2713 {nombre_df}: columnas validadas')\n",
-        "    return True\n",
-        "\n",
-        "\n",
-        "def detectar_duplicados(df, subset, nombre_df='DataFrame'):\n",
-        "    \"\"\"Reporta duplicados sobre un subset de columnas.\"\"\"\n",
-        "    dupes = df[df.duplicated(subset=subset, keep=False)]\n",
-        "    n = len(dupes)\n",
-        "    if n > 0:\n",
-        "        logger.warning(f'{nombre_df}: {n} registros duplicados en {subset}')\n",
-        "    else:\n",
-        "        logger.info(f'   \\u2713 {nombre_df}: 0 duplicados en {subset}')\n",
-        "    return dupes\n",
-        "\n",
-        "\n",
-        "def contar_nulos(df, columna, nombre_df='DataFrame'):\n",
-        "    \"\"\"Cuenta nulos en una columna y reporta porcentaje.\"\"\"\n",
-        "    n = df[columna].isna().sum()\n",
-        "    pct = n / len(df) * 100\n",
-        "    if n > 0:\n",
-        "        logger.warning(f'{nombre_df} \\u2192 {columna}: {n} nulos ({pct:.1f}%)')\n",
-        "    else:\n",
-        "        logger.info(f'   \\u2713 {nombre_df} \\u2192 {columna}: 0 nulos')\n",
-        "    return n\n",
-        "\n",
-        "logger.info('--- FUNCIONES CARGADAS ---')\n",
-        "logger.info('leer_archivo_seguro, validar_columnas, detectar_duplicados, contar_nulos')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "aB3cD4eF5gH7"
-      },
-      "source": [
-        "### 1.4 Pruebas unitarias automatizadas"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 17,
-      "metadata": {
-        "id": "xK9mN2pQ7rS4"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,436 | INFO     | === PRUEBAS UNITARIAS ===\n",
-            "2026-08-22 22:07:40,462 | INFO     | Archivo leído: tmpup3yfejj.csv (2 filas, 2 cols)\n",
-            "2026-08-22 22:07:40,464 | ERROR    | Error leyendo dummy.txt: Tipo no soportado: xml\n",
-            "2026-08-22 22:07:40,465 | INFO     |    ✓ Test: columnas validadas\n",
-            "2026-08-22 22:07:40,466 | ERROR    | Test sin columnas: ['x', 'y']\n",
-            "2026-08-22 22:07:40,473 | WARNING  | Test: 2 registros duplicados en ['id']\n",
-            "2026-08-22 22:07:40,475 | INFO     |    ✓ Test: 0 duplicados en ['id']\n",
-            "2026-08-22 22:07:40,476 | WARNING  | Test → score: 2 nulos (40.0%)\n",
-            "2026-08-22 22:07:40,477 | INFO     |    ✓ Test → score: 0 nulos\n",
-            "2026-08-22 22:07:40,478 | INFO     | ✓ 8/8 pruebas pasaron exitosamente\n",
-            "2026-08-22 22:07:40,478 | INFO     | Pipeline validado para continuar.\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Pruebas unitarias: validamos las funciones críticas con datos sintéticos.\n",
-        "#? Si alguna falla, el pipeline se detiene antes de procesar datos reales.\n",
-        "import tempfile\n",
-        "import os\n",
-        "\n",
-        "def ejecutar_pruebas():\n",
-        "    \"\"\"Suite de pruebas unitarias para funciones del pipeline.\"\"\"\n",
-        "    errores = []\n",
-        "    pruebas_pasadas = 0\n",
-        "\n",
-        "    # --- Test 1: leer_archivo_seguro con CSV válido ---\n",
-        "    try:\n",
-        "        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:\n",
-        "            f.write('col_a,col_b\\n1,2\\n3,4\\n')\n",
-        "            tmp_path = f.name\n",
-        "        df_test = leer_archivo_seguro(tmp_path, tipo='csv')\n",
-        "        assert len(df_test) == 2, f'Esperado 2 filas, obtenido {len(df_test)}'\n",
-        "        assert list(df_test.columns) == ['col_a', 'col_b'], 'Columnas incorrectas'\n",
-        "        os.unlink(tmp_path)\n",
-        "        pruebas_pasadas += 1\n",
-        "    except AssertionError as e:\n",
-        "        errores.append(f'test_leer_csv_valido: {e}')\n",
-        "\n",
-        "    # --- Test 2: leer_archivo_seguro con tipo inválido ---\n",
-        "    try:\n",
-        "        error_capturado = False\n",
-        "        try:\n",
-        "            leer_archivo_seguro('dummy.txt', tipo='xml')\n",
-        "        except ValueError:\n",
-        "            error_capturado = True\n",
-        "        assert error_capturado, 'Debería lanzar ValueError para tipo no soportado'\n",
-        "        pruebas_pasadas += 1\n",
-        "    except AssertionError as e:\n",
-        "        errores.append(f'test_leer_tipo_invalido: {e}')\n",
-        "\n",
-        "    # --- Test 3: validar_columnas con columnas presentes ---\n",
-        "    try:\n",
-        "        df_test = pd.DataFrame({'a': [1], 'b': [2], 'c': [3]})\n",
-        "        resultado = validar_columnas(df_test, ['a', 'b'], 'Test')\n",
-        "        assert resultado == True, 'Debería retornar True'\n",
-        "        pruebas_pasadas += 1\n",
-        "    except AssertionError as e:\n",
-        "        errores.append(f'test_validar_columnas_ok: {e}')\n",
-        "\n",
-        "    # --- Test 4: validar_columnas con columnas faltantes ---\n",
-        "    try:\n",
-        "        df_test = pd.DataFrame({'a': [1], 'b': [2]})\n",
-        "        error_capturado = False\n",
-        "        try:\n",
-        "            validar_columnas(df_test, ['a', 'x', 'y'], 'Test')\n",
-        "        except ValueError:\n",
-        "            error_capturado = True\n",
-        "        assert error_capturado, 'Debería lanzar ValueError'\n",
-        "        pruebas_pasadas += 1\n",
-        "    except AssertionError as e:\n",
-        "        errores.append(f'test_validar_columnas_faltantes: {e}')\n",
-        "\n",
-        "    # --- Test 5: detectar_duplicados ---\n",
-        "    try:\n",
-        "        df_test = pd.DataFrame({'id': [1, 2, 2, 3], 'val': ['a', 'b', 'c', 'd']})\n",
-        "        dupes = detectar_duplicados(df_test, subset=['id'], nombre_df='Test')\n",
-        "        assert len(dupes) == 2, f'Esperado 2 duplicados, obtenido {len(dupes)}'\n",
-        "        pruebas_pasadas += 1\n",
-        "    except AssertionError as e:\n",
-        "        errores.append(f'test_detectar_duplicados: {e}')\n",
-        "\n",
-        "    # --- Test 6: detectar_duplicados sin duplicados ---\n",
-        "    try:\n",
-        "        df_test = pd.DataFrame({'id': [1, 2, 3], 'val': ['a', 'b', 'c']})\n",
-        "        dupes = detectar_duplicados(df_test, subset=['id'], nombre_df='Test')\n",
-        "        assert len(dupes) == 0, f'Esperado 0 duplicados, obtenido {len(dupes)}'\n",
-        "        pruebas_pasadas += 1\n",
-        "    except AssertionError as e:\n",
-        "        errores.append(f'test_sin_duplicados: {e}')\n",
-        "\n",
-        "    # --- Test 7: contar_nulos con nulos ---\n",
-        "    try:\n",
-        "        df_test = pd.DataFrame({'score': [10, None, 30, None, 50]})\n",
-        "        n = contar_nulos(df_test, 'score', 'Test')\n",
-        "        assert n == 2, f'Esperado 2 nulos, obtenido {n}'\n",
-        "        pruebas_pasadas += 1\n",
-        "    except AssertionError as e:\n",
-        "        errores.append(f'test_contar_nulos: {e}')\n",
-        "\n",
-        "    # --- Test 8: contar_nulos sin nulos ---\n",
-        "    try:\n",
-        "        df_test = pd.DataFrame({'score': [10, 20, 30]})\n",
-        "        n = contar_nulos(df_test, 'score', 'Test')\n",
-        "        assert n == 0, f'Esperado 0 nulos, obtenido {n}'\n",
-        "        pruebas_pasadas += 1\n",
-        "    except AssertionError as e:\n",
-        "        errores.append(f'test_sin_nulos: {e}')\n",
-        "\n",
-        "    return pruebas_pasadas, errores\n",
-        "\n",
-        "# Ejecutar pruebas\n",
-        "logger.info('=== PRUEBAS UNITARIAS ===')\n",
-        "total_pasadas, errores_encontrados = ejecutar_pruebas()\n",
-        "total_tests = total_pasadas + len(errores_encontrados)\n",
-        "\n",
-        "if errores_encontrados:\n",
-        "    for err in errores_encontrados:\n",
-        "        logger.error(f'FALLO: {err}')\n",
-        "    raise RuntimeError(f'{len(errores_encontrados)}/{total_tests} pruebas fallaron. Pipeline detenido.')\n",
-        "else:\n",
-        "    logger.info(f'\\u2713 {total_pasadas}/{total_tests} pruebas pasaron exitosamente')\n",
-        "    logger.info('Pipeline validado para continuar.')"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 18,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "Y2giE7QClQtq",
-        "outputId": "abd5449e-b2ae-4b4b-b979-c2fc0fcb6874"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,485 | INFO     | --- COPIADO DE ARCHIVOS A RAW ---\n",
-            "2026-08-22 22:07:40,492 | INFO     |   ✓ estudiantes_master.xlsx copiado a data/raw/\n",
-            "2026-08-22 22:07:40,500 | INFO     |   ✓ entregas_campus_matriz.csv copiado a data/raw/\n",
-            "2026-08-22 22:07:40,508 | INFO     |   ✓ entregas_campus_extension.csv copiado a data/raw/\n",
-            "2026-08-22 22:07:40,509 | INFO     | --- FIN COPIADO ---\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Copiamos los archivos fuente al directorio raw para garantizar trazabilidad.\n",
-        "#? Los nombres de archivos se obtienen de config.json.\n",
-        "\n",
-        "logger.info('--- COPIADO DE ARCHIVOS A RAW ---')\n",
-        "archivos_fuente = CONFIG['archivos_fuente']\n",
-        "\n",
-        "for clave, nombre in archivos_fuente.items():\n",
-        "    origen = BASE_DIR / nombre\n",
-        "    destino = RAW_DIR / nombre\n",
-        "    if origen.exists():\n",
-        "        shutil.copy2(origen, destino)\n",
-        "        logger.info(f'  \\u2713 {nombre} copiado a {CONFIG[\"rutas\"][\"raw\"]}/')\n",
-        "    else:\n",
-        "        logger.warning(f'  \\u2717 {nombre} NO encontrado en {origen}')\n",
-        "\n",
-        "logger.info('--- FIN COPIADO ---')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "t9SW8tWflQtq"
-      },
-      "source": [
-        "### 2.1 Lectura estructurada de datos"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 19,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "nH9E-E5HlQtr",
-        "outputId": "eaf13731-855e-4d79-b30a-a8de053a70db"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,516 | INFO     | --- CARGA DE DATOS ---\n",
-            "2026-08-22 22:07:40,525 | ERROR    | Error leyendo /Users/josias.pina/G6_Taller_Clase3/data/raw/estudiantes_master.xlsx: File is not a zip file\n",
-            "2026-08-22 22:07:40,529 | INFO     | Archivo leído: estudiantes_master.xlsx (60 filas, 7 cols)\n",
-            "2026-08-22 22:07:40,530 | INFO     |    ✓ Catálogo: columnas validadas\n",
-            "2026-08-22 22:07:40,532 | INFO     |    Catálogo: 60 → 60 (sin duplicados)\n",
-            "2026-08-22 22:07:40,535 | INFO     | Archivo leído: entregas_campus_matriz.csv (150 filas, 7 cols)\n",
-            "2026-08-22 22:07:40,538 | INFO     | Archivo leído: entregas_campus_extension.csv (150 filas, 7 cols)\n",
-            "2026-08-22 22:07:40,538 | INFO     |    ✓ Matriz: columnas validadas\n",
-            "2026-08-22 22:07:40,539 | INFO     |    ✓ Extensión: columnas validadas\n",
-            "2026-08-22 22:07:40,539 | INFO     |    Matriz:    (150, 7)\n",
-            "2026-08-22 22:07:40,539 | INFO     |    Extensión: (150, 7)\n",
-            "2026-08-22 22:07:40,540 | INFO     |    Catálogo:  (60, 7)\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Forzamos dtype str en IDs para evitar que pandas los interprete como numéricos y pierda ceros.\n",
-        "#? Columnas requeridas se obtienen de config.json.\n",
-        "\n",
-        "logger.info('--- CARGA DE DATOS ---')\n",
-        "\n",
-        "# Catálogo maestro (Excel)\n",
-        "ruta_catalogo = RAW_DIR / CONFIG['archivos_fuente']['catalogo']\n",
-        "try:\n",
-        "    df_catalogo = leer_archivo_seguro(\n",
-        "        ruta_catalogo, tipo='excel', engine='openpyxl',\n",
-        "        dtype={'id_estudiante': str}\n",
-        "    )\n",
-        "except Exception:\n",
-        "    df_catalogo = leer_archivo_seguro(\n",
-        "        ruta_catalogo, tipo='csv', sep=',',\n",
-        "        dtype={'id_estudiante': str}\n",
-        "    )\n",
-        "\n",
-        "columnas_catalogo = CONFIG['columnas_requeridas']['catalogo']\n",
-        "validar_columnas(df_catalogo, columnas_catalogo, 'Cat\\u00e1logo')\n",
-        "\n",
-        "#? Eliminamos duplicados en la llave primaria antes del merge.\n",
-        "df_catalogo_limpio = df_catalogo.drop_duplicates(subset=['id_estudiante'])\n",
-        "logger.info(f'   Cat\\u00e1logo: {len(df_catalogo)} \\u2192 {len(df_catalogo_limpio)} (sin duplicados)')\n",
-        "\n",
-        "# Entregas campus Matriz (CSV)\n",
-        "df_matriz = leer_archivo_seguro(\n",
-        "    RAW_DIR / CONFIG['archivos_fuente']['entregas_matriz'],\n",
-        "    tipo='csv', sep=',',\n",
-        "    dtype={'id_entrega': str, 'id_estudiante': str}\n",
-        ")\n",
-        "\n",
-        "# Entregas campus Extensión (CSV)\n",
-        "df_extension = leer_archivo_seguro(\n",
-        "    RAW_DIR / CONFIG['archivos_fuente']['entregas_extension'],\n",
-        "    tipo='csv', sep=',',\n",
-        "    dtype={'id_entrega': str, 'id_estudiante': str}\n",
-        ")\n",
-        "\n",
-        "columnas_entregas = CONFIG['columnas_requeridas']['entregas']\n",
-        "validar_columnas(df_matriz, columnas_entregas, 'Matriz')\n",
-        "validar_columnas(df_extension, columnas_entregas, 'Extensi\\u00f3n')\n",
-        "\n",
-        "logger.info(f'   Matriz:    {df_matriz.shape}')\n",
-        "logger.info(f'   Extensi\\u00f3n: {df_extension.shape}')\n",
-        "logger.info(f'   Cat\\u00e1logo:  {df_catalogo_limpio.shape}')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "HMgT5jWjlQtr"
-      },
-      "source": [
-        "### 2.2 Integración estructural (concat)"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 20,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "graKfXNJlQtr",
-        "outputId": "fb0796d4-5dfa-4d98-fc93-9047c556a005"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,548 | INFO     |    ✓ Consolidado: 0 duplicados en ['id_entrega']\n",
-            "2026-08-22 22:07:40,549 | INFO     | --- CONCAT ---\n",
-            "2026-08-22 22:07:40,549 | INFO     | Matriz (150) + Extensión (150) = 300 registros\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Concat: unimos DataFrames con esquema idéntico (mismas columnas, distinto origen).\n",
-        "#? Agregamos columna 'campus' ANTES de concatenar para no perder el origen de cada fila.\n",
-        "\n",
-        "df_matriz['campus'] = 'matriz'\n",
-        "df_extension['campus'] = 'extension'\n",
-        "\n",
-        "df_consolidado = pd.concat(\n",
-        "    [df_matriz, df_extension],\n",
-        "    ignore_index=True\n",
-        ")\n",
-        "\n",
-        "#? Verificamos que no haya IDs de entrega repetidos entre campus.\n",
-        "detectar_duplicados(df_consolidado, subset=['id_entrega'], nombre_df='Consolidado')\n",
-        "\n",
-        "logger.info(f'--- CONCAT ---')\n",
-        "logger.info(f'Matriz ({len(df_matriz)}) + Extensi\\u00f3n ({len(df_extension)}) = {len(df_consolidado)} registros')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "V3PKI7q5lQtr"
-      },
-      "source": [
-        "### 2.3 Integración relacional (merge)"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 21,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "I0fqj75zlQtr",
-        "outputId": "02d872f7-ebda-4abf-b8b9-4aad09c68d68"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,569 | INFO     | --- MERGE ---\n",
-            "2026-08-22 22:07:40,571 | INFO     | _merge\n",
-            "both          295\n",
-            "left_only       5\n",
-            "right_only      0\n",
-            "2026-08-22 22:07:40,573 | INFO     | Huérfanos: 5 (1.7%)\n",
-            "2026-08-22 22:07:40,577 | INFO     |    Exportado → huerfanos_20260822.csv\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Merge left: conservamos TODAS las entregas aunque el estudiante no esté en el catálogo.\n",
-        "#? validate='many_to_one': falla si el catálogo tiene claves duplicadas (detecta error upstream).\n",
-        "#? indicator=True: nos permite auditar qué registros no encontraron match.\n",
-        "\n",
-        "df_integrado = pd.merge(\n",
-        "    df_consolidado,\n",
-        "    df_catalogo_limpio,\n",
-        "    on='id_estudiante',\n",
-        "    how='left',\n",
-        "    validate='many_to_one',\n",
-        "    indicator=True\n",
-        ")\n",
-        "\n",
-        "logger.info('--- MERGE ---')\n",
-        "logger.info(df_integrado['_merge'].value_counts().to_string())\n",
-        "\n",
-        "#? Huérfanos = entregas de estudiantes no matriculados. Los exportamos para auditoría.\n",
-        "df_huerfanos = df_integrado[df_integrado['_merge'] == 'left_only']\n",
-        "logger.info(f'Hu\\u00e9rfanos: {len(df_huerfanos)} ({len(df_huerfanos)/len(df_integrado)*100:.1f}%)')\n",
-        "\n",
-        "archivos_exportados = []  # Inicializamos el contador global de archivos\n",
-        "\n",
-        "if len(df_huerfanos) > 0:\n",
-        "    archivo_huerfanos = PROCESSED_DIR / f'huerfanos_{datetime.now().strftime(\"%Y%m%d\")}.csv'\n",
-        "    df_huerfanos.to_csv(archivo_huerfanos, index=False)\n",
-        "    archivos_exportados.append(archivo_huerfanos.name)\n",
-        "    logger.info(f'   Exportado \\u2192 {archivo_huerfanos.name}')\n",
-        "\n",
-        "df_integrado = df_integrado.drop(columns=['_merge'])"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "O1e2odTPlQtr"
-      },
-      "source": [
-        "### 2.4 Validaciones adicionales y limpieza"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 22,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "kWo5nVI9lQts",
-        "outputId": "87965f26-f290-4bae-b405-637de1d9acb8"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,584 | INFO     | --- VALIDACIONES ---\n",
-            "2026-08-22 22:07:40,585 | WARNING  | Integrado → puntaje_obtenido: 9 nulos (3.0%)\n",
-            "2026-08-22 22:07:40,587 | INFO     |    Pendiente CON puntaje (inconsistente): 0\n",
-            "2026-08-22 22:07:40,587 | INFO     |    Revisión SIN puntaje (inconsistente):  0\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Identificamos nulos críticos en puntaje: pueden indicar entregas no calificadas.\n",
-        "#? También buscamos inconsistencias lógicas entre estado y puntaje.\n",
-        "\n",
-        "logger.info('--- VALIDACIONES ---')\n",
-        "nulos_puntaje = contar_nulos(df_integrado, 'puntaje_obtenido', 'Integrado')\n",
-        "\n",
-        "# Inconsistencias: Pendiente con puntaje o Revisión sin puntaje\n",
-        "pendiente_con_nota = df_integrado[\n",
-        "    (df_integrado['estado_entrega'] == 'Pendiente') &\n",
-        "    (df_integrado['puntaje_obtenido'].notna())\n",
-        "]\n",
-        "revision_sin_nota = df_integrado[\n",
-        "    (df_integrado['estado_entrega'] == 'Revisi\\u00f3n') &\n",
-        "    (df_integrado['puntaje_obtenido'].isna())\n",
-        "]\n",
-        "\n",
-        "logger.info(f'   Pendiente CON puntaje (inconsistente): {len(pendiente_con_nota)}')\n",
-        "logger.info(f'   Revisi\\u00f3n SIN puntaje (inconsistente):  {len(revision_sin_nota)}')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "6YwTdHUGlQts"
-      },
-      "source": [
-        "### 2.5 Análisis exploratorio y agregaciones"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 23,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "YTUZouv5lQts",
-        "outputId": "e2d4485d-78aa-4a3f-fa27-582cfda8ee5e"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,595 | INFO     | --- DESCRIPTIVOS ---\n",
-            "2026-08-22 22:07:40,601 | INFO     | \n",
-            "count    291.000000\n",
-            "mean      90.347079\n",
-            "std        6.627905\n",
-            "min       60.000000\n",
-            "25%       87.000000\n",
-            "50%       91.000000\n",
-            "75%       95.000000\n",
-            "max      100.000000\n",
-            "2026-08-22 22:07:40,603 | INFO     | --- PROMEDIO POR CAMPUS ---\n",
-            "2026-08-22 22:07:40,606 | INFO     | \n",
-            "campus\n",
-            "extension    90.697279\n",
-            "matriz       89.989583\n",
-            "2026-08-22 22:07:40,607 | INFO     | --- ESTADO DE ENTREGAS ---\n",
-            "2026-08-22 22:07:40,609 | INFO     | \n",
-            "estado_entrega\n",
-            "Aprobado     276\n",
-            "Revisión      15\n",
-            "Pendiente      9\n",
-            "2026-08-22 22:07:40,610 | INFO     | --- TOP 5 ESTUDIANTES (promedio) ---\n",
-            "2026-08-22 22:07:40,612 | INFO     | \n",
-            "id_estudiante\n",
-            "E999    100.000000\n",
-            "E026     99.285714\n",
-            "E058     99.000000\n",
-            "E039     98.500000\n",
-            "E043     98.333333\n",
-            "2026-08-22 22:07:40,613 | INFO     | --- BOTTOM 5 ESTUDIANTES (promedio) ---\n",
-            "2026-08-22 22:07:40,615 | INFO     | \n",
-            "id_estudiante\n",
-            "E888    60.000000\n",
-            "E012    70.333333\n",
-            "E030    76.714286\n",
-            "E020    81.800000\n",
-            "E042    83.000000\n",
-            "2026-08-22 22:07:40,615 | INFO     | --- PROMEDIO POR MATERIA ---\n",
-            "2026-08-22 22:07:40,616 | INFO     | \n",
-            "materia\n",
-            "Desarrollo de Software        90.752427\n",
-            "DataOps                       90.532609\n",
-            "Sistemas de Bases de Datos    89.734375\n",
-            "2026-08-22 22:07:40,617 | INFO     | --- PROMEDIO POR TIPO DE PROYECTO ---\n",
-            "2026-08-22 22:07:40,618 | INFO     | \n",
-            "tipo_proyecto\n",
-            "Testing          91.513514\n",
-            "Prototipo        91.483871\n",
-            "Frontend         91.000000\n",
-            "Pipeline         90.857143\n",
-            "Deploy           90.260000\n",
-            "Script SQL       89.939394\n",
-            "Normalización    89.709677\n",
-            "Modelado ER      89.546875\n",
-            "API REST         89.140625\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Agregamos por múltiples ejes para entender la distribución de los datos.\n",
-        "\n",
-        "logger.info('--- DESCRIPTIVOS ---')\n",
-        "logger.info('\\n' + df_integrado['puntaje_obtenido'].describe().to_string())\n",
-        "\n",
-        "logger.info('--- PROMEDIO POR CAMPUS ---')\n",
-        "logger.info('\\n' + df_integrado.groupby('campus')['puntaje_obtenido'].mean().to_string())\n",
-        "\n",
-        "logger.info('--- ESTADO DE ENTREGAS ---')\n",
-        "logger.info('\\n' + df_integrado['estado_entrega'].value_counts().to_string())\n",
-        "\n",
-        "logger.info('--- TOP 5 ESTUDIANTES (promedio) ---')\n",
-        "top5 = (df_integrado.groupby('id_estudiante')['puntaje_obtenido']\n",
-        "        .mean().nlargest(5))\n",
-        "logger.info('\\n' + top5.to_string())\n",
-        "\n",
-        "logger.info('--- BOTTOM 5 ESTUDIANTES (promedio) ---')\n",
-        "bottom5 = (df_integrado.groupby('id_estudiante')['puntaje_obtenido']\n",
-        "           .mean().nsmallest(5))\n",
-        "logger.info('\\n' + bottom5.to_string())\n",
-        "\n",
-        "logger.info('--- PROMEDIO POR MATERIA ---')\n",
-        "logger.info('\\n' + df_integrado.groupby('materia')['puntaje_obtenido'].mean().sort_values(ascending=False).to_string())\n",
-        "\n",
-        "logger.info('--- PROMEDIO POR TIPO DE PROYECTO ---')\n",
-        "logger.info('\\n' + df_integrado.groupby('tipo_proyecto')['puntaje_obtenido'].mean().sort_values(ascending=False).to_string())"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "PpyQ3IF7lQts"
-      },
-      "source": [
-        "### 2.6 Resumen analítico por estudiante"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 24,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "4b3fqB9NlQts",
-        "outputId": "55dd6416-c443-409e-c92d-4bda664f30d1"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,631 | INFO     | --- RESUMEN POR ESTUDIANTE ---\n",
-            "2026-08-22 22:07:40,632 | INFO     | Dimensiones: (64, 5)\n",
-            "2026-08-22 22:07:40,635 | INFO     | \n",
-            "id_estudiante    campus  promedio  entregas  desviacion\n",
-            "         E001    matriz 93.785714         7    4.376615\n",
-            "         E002    matriz 83.857143         7    7.358183\n",
-            "         E003    matriz 91.600000         7    1.557241\n",
-            "         E004 extension 89.857143         8    1.772811\n",
-            "         E005 extension 94.250000         8    1.982062\n",
-            "         E006    matriz 96.857143         7    3.023716\n",
-            "         E007    matriz 85.500000         7    4.330127\n",
-            "         E008    matriz 94.142857         7    3.023716\n",
-            "         E009 extension 87.562500         8    1.678381\n",
-            "         E010 extension 97.875000         8    1.246423\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Agrupamos por estudiante+campus para generar un perfil resumido por persona.\n",
-        "#? La desviación estándar revela consistencia: un alumno con std alta es irregular.\n",
-        "\n",
-        "resumen_final = (df_integrado\n",
-        "    .groupby(['id_estudiante', 'campus'])\n",
-        "    .agg(\n",
-        "        promedio=('puntaje_obtenido', 'mean'),\n",
-        "        entregas=('id_entrega', 'count'),\n",
-        "        desviacion=('puntaje_obtenido', 'std')\n",
-        "    )\n",
-        "    .reset_index()\n",
-        ")\n",
-        "\n",
-        "logger.info('--- RESUMEN POR ESTUDIANTE ---')\n",
-        "logger.info(f'Dimensiones: {resumen_final.shape}')\n",
-        "logger.info('\\n' + resumen_final.head(10).to_string(index=False))"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "_wdn4IsDlQts"
-      },
-      "source": [
-        "### 2.7 Indicadores de calidad del proceso"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 25,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "DQAD3NwllQts",
-        "outputId": "a636c158-6028-4893-926f-1e3f003f5112"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,648 | INFO     | === INDICADORES DE CALIDAD DEL PROCESO ===\n",
-            "2026-08-22 22:07:40,649 | INFO     | \n",
-            "--- MÉTRICAS DE COMPLETITUD ---\n",
-            "2026-08-22 22:07:40,650 | INFO     |    id_entrega......................... 100.00%\n",
-            "2026-08-22 22:07:40,652 | INFO     |    id_estudiante...................... 100.00%\n",
-            "2026-08-22 22:07:40,653 | INFO     |    fecha_subida....................... 100.00%\n",
-            "2026-08-22 22:07:40,653 | INFO     |    materia............................ 100.00%\n",
-            "2026-08-22 22:07:40,654 | INFO     |    tipo_proyecto...................... 100.00%\n",
-            "2026-08-22 22:07:40,655 | INFO     |    puntaje_obtenido................... 97.00%\n",
-            "2026-08-22 22:07:40,655 | INFO     |    estado_entrega..................... 100.00%\n",
-            "2026-08-22 22:07:40,657 | INFO     |    campus............................. 100.00%\n",
-            "2026-08-22 22:07:40,657 | INFO     |    nombre_completo.................... 98.33%\n",
-            "2026-08-22 22:07:40,658 | INFO     |    fecha_nacimiento................... 98.33%\n",
-            "2026-08-22 22:07:40,659 | INFO     |    carrera............................ 98.33%\n",
-            "2026-08-22 22:07:40,659 | INFO     |    campus_origen...................... 98.33%\n",
-            "2026-08-22 22:07:40,660 | INFO     |    tipo_beca.......................... 98.33%\n",
-            "2026-08-22 22:07:40,660 | INFO     |    estado_academico................... 98.33%\n",
-            "2026-08-22 22:07:40,661 | INFO     |    COMPLETITUD GLOBAL................. 99.07%\n",
-            "2026-08-22 22:07:40,661 | INFO     | \n",
-            "--- MÉTRICAS DE CONSISTENCIA ---\n",
-            "2026-08-22 22:07:40,664 | INFO     |    puntajes_fuera_rango............... 0\n",
-            "2026-08-22 22:07:40,664 | INFO     |    estados_invalidos.................. 0\n",
-            "2026-08-22 22:07:40,664 | INFO     |    pendiente_con_puntaje.............. 0\n",
-            "2026-08-22 22:07:40,665 | INFO     |    revision_sin_puntaje............... 0\n",
-            "2026-08-22 22:07:40,665 | INFO     |    consistencia_puntaje_pct........... 100.0\n",
-            "2026-08-22 22:07:40,665 | INFO     |    consistencia_estados_pct........... 100.0\n",
-            "2026-08-22 22:07:40,666 | INFO     | \n",
-            "--- MÉTRICAS DE UNICIDAD ---\n",
-            "2026-08-22 22:07:40,666 | INFO     |    id_entrega: 300 únicos / 300 total (100.00% unicidad)\n",
-            "2026-08-22 22:07:40,667 | INFO     |    id_estudiante: 64 únicos / 300 total (21.33% unicidad)\n",
-            "2026-08-22 22:07:40,667 | INFO     | \n",
-            "--- RESUMEN DE INDICADORES ---\n",
-            "2026-08-22 22:07:40,668 | INFO     |    archivos_procesados..................... 3\n",
-            "2026-08-22 22:07:40,668 | INFO     |    registros_catalogo...................... 60\n",
-            "2026-08-22 22:07:40,669 | INFO     |    registros_matriz........................ 150\n",
-            "2026-08-22 22:07:40,669 | INFO     |    registros_extension..................... 150\n",
-            "2026-08-22 22:07:40,670 | INFO     |    registros_consolidados.................. 300\n",
-            "2026-08-22 22:07:40,670 | INFO     |    registros_integrados.................... 300\n",
-            "2026-08-22 22:07:40,671 | INFO     |    duplicados_catalogo_eliminados.......... 0\n",
-            "2026-08-22 22:07:40,671 | INFO     |    claves_sin_correspondencia.............. 5\n",
-            "2026-08-22 22:07:40,671 | INFO     |    nulos_puntaje_obtenido.................. 9\n",
-            "2026-08-22 22:07:40,672 | INFO     |    dimension_salida_filas.................. 300\n",
-            "2026-08-22 22:07:40,672 | INFO     |    dimension_salida_columnas............... 14\n",
-            "2026-08-22 22:07:40,672 | INFO     |    completitud_global_pct.................. 99.07\n",
-            "2026-08-22 22:07:40,673 | INFO     |    puntajes_fuera_rango.................... 0\n",
-            "2026-08-22 22:07:40,673 | INFO     |    estados_invalidos....................... 0\n",
-            "2026-08-22 22:07:40,673 | INFO     |    pendiente_con_puntaje................... 0\n",
-            "2026-08-22 22:07:40,674 | INFO     |    revision_sin_puntaje.................... 0\n",
-            "2026-08-22 22:07:40,674 | INFO     |    consistencia_puntaje_pct................ 100.0\n",
-            "2026-08-22 22:07:40,675 | INFO     |    consistencia_estados_pct................ 100.0\n",
-            "2026-08-22 22:07:40,675 | INFO     |    unicidad_id_entrega_unicos.............. 300\n",
-            "2026-08-22 22:07:40,675 | INFO     |    unicidad_id_entrega_duplicados.......... 0\n",
-            "2026-08-22 22:07:40,675 | INFO     |    unicidad_id_entrega_pct................. 100.0\n",
-            "2026-08-22 22:07:40,676 | INFO     |    unicidad_id_estudiante_unicos........... 64\n",
-            "2026-08-22 22:07:40,677 | INFO     |    unicidad_id_estudiante_duplicados....... 236\n",
-            "2026-08-22 22:07:40,677 | INFO     |    unicidad_id_estudiante_pct.............. 21.33\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Los indicadores auditan el pipeline: si alguno cambia entre ejecuciones, algo se rompió.\n",
-        "#? MEJORA: Métricas de completitud, consistencia y unicidad detalladas.\n",
-        "\n",
-        "logger.info('=== INDICADORES DE CALIDAD DEL PROCESO ===')\n",
-        "\n",
-        "# --- Métricas básicas del pipeline ---\n",
-        "indicadores_basicos = {\n",
-        "    'archivos_procesados': len(CONFIG['archivos_fuente']),\n",
-        "    'registros_catalogo': len(df_catalogo),\n",
-        "    'registros_matriz': len(df_matriz),\n",
-        "    'registros_extension': len(df_extension),\n",
-        "    'registros_consolidados': len(df_consolidado),\n",
-        "    'registros_integrados': len(df_integrado),\n",
-        "    'duplicados_catalogo_eliminados': len(df_catalogo) - len(df_catalogo_limpio),\n",
-        "    'claves_sin_correspondencia': len(df_huerfanos),\n",
-        "    'nulos_puntaje_obtenido': nulos_puntaje,\n",
-        "    'dimension_salida_filas': df_integrado.shape[0],\n",
-        "    'dimension_salida_columnas': df_integrado.shape[1],\n",
-        "}\n",
-        "\n",
-        "# --- COMPLETITUD: % de celdas no-nulas por columna ---\n",
-        "logger.info('\\n--- M\\u00c9TRICAS DE COMPLETITUD ---')\n",
-        "completitud = {}\n",
-        "for col in df_integrado.columns:\n",
-        "    no_nulos = df_integrado[col].notna().sum()\n",
-        "    total = len(df_integrado)\n",
-        "    pct = (no_nulos / total) * 100\n",
-        "    completitud[f'completitud_{col}'] = round(pct, 2)\n",
-        "    logger.info(f'   {col:.<35} {pct:.2f}%')\n",
-        "\n",
-        "completitud_global = sum(completitud.values()) / len(completitud)\n",
-        "logger.info(f'   {\"COMPLETITUD GLOBAL\":.<35} {completitud_global:.2f}%')\n",
-        "\n",
-        "# --- CONSISTENCIA: Reglas de negocio ---\n",
-        "logger.info('\\n--- M\\u00c9TRICAS DE CONSISTENCIA ---')\n",
-        "puntaje_min = CONFIG['validaciones']['puntaje_minimo']\n",
-        "puntaje_max = CONFIG['validaciones']['puntaje_maximo']\n",
-        "estados_validos = CONFIG['validaciones']['estados_validos']\n",
-        "\n",
-        "# Puntajes fuera de rango\n",
-        "fuera_rango = df_integrado[\n",
-        "    (df_integrado['puntaje_obtenido'].notna()) &\n",
-        "    ((df_integrado['puntaje_obtenido'] < puntaje_min) |\n",
-        "     (df_integrado['puntaje_obtenido'] > puntaje_max))\n",
-        "]\n",
-        "# Estados inválidos\n",
-        "estados_invalidos = df_integrado[\n",
-        "    ~df_integrado['estado_entrega'].isin(estados_validos)\n",
-        "]\n",
-        "\n",
-        "consistencia = {\n",
-        "    'puntajes_fuera_rango': len(fuera_rango),\n",
-        "    'estados_invalidos': len(estados_invalidos),\n",
-        "    'pendiente_con_puntaje': len(pendiente_con_nota),\n",
-        "    'revision_sin_puntaje': len(revision_sin_nota),\n",
-        "    'consistencia_puntaje_pct': round((1 - len(fuera_rango) / len(df_integrado)) * 100, 2),\n",
-        "    'consistencia_estados_pct': round((1 - len(estados_invalidos) / len(df_integrado)) * 100, 2),\n",
-        "}\n",
-        "\n",
-        "for k, v in consistencia.items():\n",
-        "    logger.info(f'   {k:.<35} {v}')\n",
-        "\n",
-        "# --- UNICIDAD: Valores \\u00fanicos en columnas clave ---\n",
-        "logger.info('\\n--- M\\u00c9TRICAS DE UNICIDAD ---')\n",
-        "unicidad = {}\n",
-        "for col in ['id_entrega', 'id_estudiante']:\n",
-        "    total = len(df_integrado)\n",
-        "    unicos = df_integrado[col].nunique()\n",
-        "    duplicados = total - unicos\n",
-        "    pct_unicidad = (unicos / total) * 100\n",
-        "    unicidad[f'unicidad_{col}_unicos'] = unicos\n",
-        "    unicidad[f'unicidad_{col}_duplicados'] = duplicados\n",
-        "    unicidad[f'unicidad_{col}_pct'] = round(pct_unicidad, 2)\n",
-        "    logger.info(f'   {col}: {unicos} \\u00fanicos / {total} total ({pct_unicidad:.2f}% unicidad)')\n",
-        "\n",
-        "# --- Consolidar todos los indicadores ---\n",
-        "indicadores = {\n",
-        "    **indicadores_basicos,\n",
-        "    'completitud_global_pct': round(completitud_global, 2),\n",
-        "    **consistencia,\n",
-        "    **unicidad,\n",
-        "}\n",
-        "\n",
-        "logger.info('\\n--- RESUMEN DE INDICADORES ---')\n",
-        "for k, v in indicadores.items():\n",
-        "    logger.info(f'   {k:.<40} {v}')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "vS_cPLJXlQts"
-      },
-      "source": [
-        "### 2.8 Exportación de datos finales"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 26,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "Ivec7eenlQtt",
-        "outputId": "1113a58e-dfc0-4f7f-ebeb-af2cbfbfc41d"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,685 | INFO     | --- EXPORTACIÓN ---\n",
-            "2026-08-22 22:07:40,690 | INFO     |    ✓ dataset_integrado_20260822.csv\n",
-            "2026-08-22 22:07:40,693 | INFO     |    ✓ dataset_integrado_20260822.json\n",
-            "2026-08-22 22:07:40,762 | INFO     |    ✓ dataset_integrado_20260822.xlsx\n",
-            "2026-08-22 22:07:40,764 | INFO     |    ✓ resumen_estudiantes_20260822.csv\n",
-            "2026-08-22 22:07:40,766 | INFO     |    ✓ resumen_estudiantes_20260822.json\n",
-            "2026-08-22 22:07:40,790 | INFO     |    ✓ resumen_estudiantes_20260822.xlsx\n",
-            "2026-08-22 22:07:40,799 | INFO     |    ✓ indicadores_calidad_20260822.csv\n",
-            "2026-08-22 22:07:40,811 | INFO     | \n",
-            "   Total archivos generados: 8 (verificado en disco)\n",
-            "2026-08-22 22:07:40,811 | INFO     |    Archivos rastreados en pipeline: 8\n",
-            "2026-08-22 22:07:40,812 | INFO     | === EXPORTACIÓN COMPLETA ===\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Exportamos en 3 formatos definidos en config.json para cubrir distintos consumidores.\n",
-        "#? CSV: universal. JSON: APIs y NoSQL. Excel: usuarios no técnicos.\n",
-        "\n",
-        "stamp = datetime.now().strftime('%Y%m%d')\n",
-        "formatos = CONFIG['formatos_exportacion']\n",
-        "\n",
-        "logger.info('--- EXPORTACI\\u00d3N ---')\n",
-        "\n",
-        "# Dataset integrado\n",
-        "for fmt in formatos:\n",
-        "    nombre = PROCESSED_DIR / f'dataset_integrado_{stamp}.{fmt}'\n",
-        "    if fmt == 'json':\n",
-        "        df_integrado.to_json(nombre, orient='records', force_ascii=False, indent=2)\n",
-        "    elif fmt == 'xlsx':\n",
-        "        df_integrado.to_excel(nombre, index=False, engine='openpyxl')\n",
-        "    else:\n",
-        "        df_integrado.to_csv(nombre, index=False)\n",
-        "    archivos_exportados.append(nombre.name)\n",
-        "    logger.info(f'   \\u2713 {nombre.name}')\n",
-        "\n",
-        "# Resumen por estudiante\n",
-        "for fmt in formatos:\n",
-        "    nombre = PROCESSED_DIR / f'resumen_estudiantes_{stamp}.{fmt}'\n",
-        "    if fmt == 'json':\n",
-        "        resumen_final.to_json(nombre, orient='records', force_ascii=False, indent=2)\n",
-        "    elif fmt == 'xlsx':\n",
-        "        resumen_final.to_excel(nombre, index=False, engine='openpyxl')\n",
-        "    else:\n",
-        "        resumen_final.to_csv(nombre, index=False)\n",
-        "    archivos_exportados.append(nombre.name)\n",
-        "    logger.info(f'   \\u2713 {nombre.name}')\n",
-        "\n",
-        "# Exportar indicadores de calidad\n",
-        "nombre_ind = PROCESSED_DIR / f'indicadores_calidad_{stamp}.csv'\n",
-        "df_indicadores = pd.DataFrame([indicadores])\n",
-        "df_indicadores.to_csv(nombre_ind, index=False)\n",
-        "archivos_exportados.append(nombre_ind.name)\n",
-        "logger.info(f'   \\u2713 {nombre_ind.name}')\n",
-        "\n",
-        "# --- CORRECCI\\u00d3N: archivos_generados se calcula din\\u00e1micamente DESPU\\u00c9S de la exportaci\\u00f3n ---\n",
-        "#? Contamos archivos reales en processed/ para garantía de auditoría consistente.\n",
-        "archivos_reales = list(PROCESSED_DIR.glob('*'))\n",
-        "indicadores['archivos_generados'] = len(archivos_reales)\n",
-        "\n",
-        "# Re-exportar indicadores con el valor correcto\n",
-        "df_indicadores = pd.DataFrame([indicadores])\n",
-        "df_indicadores.to_csv(nombre_ind, index=False)\n",
-        "\n",
-        "logger.info(f'\\n   Total archivos generados: {len(archivos_reales)} (verificado en disco)')\n",
-        "logger.info(f'   Archivos rastreados en pipeline: {len(archivos_exportados)}')\n",
-        "logger.info('=== EXPORTACI\\u00d3N COMPLETA ===')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "o7YZL9wElQtt"
-      },
-      "source": [
-        "### 2.9 Estrategia de reproducibilidad"
-      ]
-    },
-    {
-      "cell_type": "code",
-      "execution_count": 27,
-      "metadata": {
-        "colab": {
-          "base_uri": "https://localhost:8080/"
-        },
-        "id": "Pn40_23elQtt",
-        "outputId": "93f431f4-9785-4f7c-c885-81d68992fcb1"
-      },
-      "outputs": [
-        {
-          "name": "stderr",
-          "output_type": "stream",
-          "text": [
-            "2026-08-22 22:07:40,817 | INFO     | === ESTRATEGIA DE REPRODUCIBILIDAD ===\n",
-            "\n",
-            "1. Entorno virtual:\n",
-            "   python -m venv .venv\n",
-            "   source .venv/bin/activate\n",
-            "\n",
-            "2. Dependencias (requirements.txt):\n",
-            "   pandas>=2.2.2\n",
-            "   numpy>=2.2.2\n",
-            "   openpyxl>=3.1.5\n",
-            "\n",
-            "3. Configuración externa:\n",
-            "   - config.json: Parámetros centralizados del pipeline\n",
-            "   - Modificar config.json para adaptar a otro entorno\n",
-            "\n",
-            "4. Control de versiones (Git):\n",
-            "   - .gitignore: data/raw/*, data/processed/*, *.pyc, .venv/, .ipynb_checkpoints/, logs/\n",
-            "   - Commits frecuentes con mensajes descriptivos\n",
-            "\n",
-            "5. Ejecución:\n",
-            "   - Rutas relativas (pathlib) → portable\n",
-            "   - Para Colab: montar Drive y copiar archivos a data/raw/\n",
-            "\n",
-            "6. Validación:\n",
-            "   - Pruebas unitarias se ejecutan al inicio del pipeline\n",
-            "   - Logging completo en logs/pipeline.log\n",
-            "   - Indicadores de calidad exportados automáticamente\n",
-            "\n",
-            "7. Determinismo:\n",
-            "   - Sin operaciones aleatorias\n",
-            "   - Timestamps en nombres de archivos para trazabilidad\n",
-            "\n",
-            "2026-08-22 22:07:40,818 | INFO     | === PIPELINE COMPLETADO EXITOSAMENTE ===\n"
-          ]
-        }
-      ],
-      "source": [
-        "#? Documentamos las condiciones para que otro analista reproduzca el resultado sin ayuda verbal.\n",
-        "\n",
-        "logger.info(\"\"\"=== ESTRATEGIA DE REPRODUCIBILIDAD ===\n",
-        "\n",
-        "1. Entorno virtual:\n",
-        "   python -m venv .venv\n",
-        "   source .venv/bin/activate\n",
-        "\n",
-        "2. Dependencias (requirements.txt):\n",
-        "   pandas>=2.2.2\n",
-        "   numpy>=2.2.2\n",
-        "   openpyxl>=3.1.5\n",
-        "\n",
-        "3. Configuraci\\u00f3n externa:\n",
-        "   - config.json: Par\\u00e1metros centralizados del pipeline\n",
-        "   - Modificar config.json para adaptar a otro entorno\n",
-        "\n",
-        "4. Control de versiones (Git):\n",
-        "   - .gitignore: data/raw/*, data/processed/*, *.pyc, .venv/, .ipynb_checkpoints/, logs/\n",
-        "   - Commits frecuentes con mensajes descriptivos\n",
-        "\n",
-        "5. Ejecuci\\u00f3n:\n",
-        "   - Rutas relativas (pathlib) \\u2192 portable\n",
-        "   - Para Colab: montar Drive y copiar archivos a data/raw/\n",
-        "\n",
-        "6. Validaci\\u00f3n:\n",
-        "   - Pruebas unitarias se ejecutan al inicio del pipeline\n",
-        "   - Logging completo en logs/pipeline.log\n",
-        "   - Indicadores de calidad exportados autom\\u00e1ticamente\n",
-        "\n",
-        "7. Determinismo:\n",
-        "   - Sin operaciones aleatorias\n",
-        "   - Timestamps en nombres de archivos para trazabilidad\n",
-        "\"\"\")\n",
-        "\n",
-        "logger.info('=== PIPELINE COMPLETADO EXITOSAMENTE ===')"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "NO08Al_hlQtt"
-      },
-      "source": [
-        "### 3.0 Reflexión final"
-      ]
-    },
-    {
-      "cell_type": "markdown",
-      "metadata": {
-        "id": "fOGKermClQtt"
-      },
-      "source": [
-        "**¿Cómo contribuye el flujo propuesto a la claridad del análisis?**\n",
-        "\n",
-        "La separación en secciones (carga → validación → integración → análisis → exportación) permite leer el notebook como un documento lineal donde cada paso tiene un propósito claro. Las funciones reutilizables eliminan código repetido y hacen explícitas las reglas de validación que de otro modo quedarían implícitas en operaciones sueltas.\n",
-        "\n",
-        "**¿Qué decisiones favorecen la eficiencia del proceso?**\n",
-        "\n",
-        "Usar `validate='many_to_one'` en el merge detecta errores en el catálogo antes de que contaminen el dataset. Exportar en múltiples formatos con un loop evita código duplicado. Las rutas con pathlib y los timestamps en archivos eliminan la necesidad de renombrar manualmente.\n",
-        "\n",
-        "**¿Qué elementos garantizan la trazabilidad?**\n",
-        "\n",
-        "La columna 'campus' añadida antes del concat preserva el origen de cada fila. El indicador `_merge` identifica huérfanos. Los indicadores de calidad funcionan como un log de auditoría: si en la próxima corrida el número de huérfanos cambia de 5 a 20, sabemos que el catálogo se desactualizó.\n",
-        "\n",
-        "**¿Qué riesgos aparecerían si este proceso se hiciera manualmente en una hoja de cálculo?**\n",
-        "\n",
-        "Copiar y pegar entre hojas no deja registro de qué filas se unieron ni cuáles quedaron fuera. Un VLOOKUP roto falla silenciosamente devolviendo #N/A sin cuantificar el impacto. No hay versionamiento: si alguien sobrescribe el archivo, se pierde el estado anterior. Escalar a más campus o semestres implicaría repetir manualmente cada paso, multiplicando la probabilidad de error humano."
-      ]
-    }
-  ],
-  "metadata": {
-    "colab": {
-      "provenance": []
-    },
-    "kernelspec": {
-      "display_name": "venv",
-      "language": "python",
-      "name": "python3"
-    },
-    "language_info": {
-      "codemirror_mode": {
-        "name": "ipython",
-        "version": 3
-      },
-      "file_extension": ".py",
-      "mimetype": "text/x-python",
-      "name": "python",
-      "nbconvert_exporter": "python",
-      "pygments_lexer": "ipython3",
-      "version": "3.12.0"
-    }
-  },
-  "nbformat": 4,
-  "nbformat_minor": 0
+# -*- coding: utf-8 -*-
+"""Taller_3_G6 (2).ipynb
+
+Automatically generated by Colab.
+
+Original file is located at
+    https://colab.research.google.com/drive/145EZ30ZKk3z3PNNO-7UIe9ueL5t0Q-ul
+
+# TALLER 3 — FLUJO ANALÍTICO REPRODUCIBLE
+
+### Requisito:
+La calificación del Taller Práctico está condicionada a la entrega previa del vídeo semanal.
+
+### Reto
+Diseñar un flujo analítico reproducible.
+
+### Objetivo y alcance del reto:
+Transformar un proceso manual de consolidación de datos en un flujo reproducible. Se aplica agrupamiento, agregación, combinación de datasets, automatización de archivos, gestión de entornos, organización de proyectos y control de versiones.
+
+### Modalidad del entregable:
+Escrito — permite documentar decisiones técnicas, justificar criterios de reproducibilidad, presentar la estructura del proyecto y explicar validaciones de forma ordenada.
+
+### 1.1 Configuración del entorno
+"""
+
+#? Importamos las dependencias mínimas para el flujo completo.
+#? sys: verificar versión de Python; pathlib: rutas portables; datetime: sellos de tiempo en exports.
+#? logging: sistema formal de registro de eventos; json: carga de configuración externa.
+import sys
+import json
+import logging
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from datetime import datetime
+import warnings
+import shutil
+warnings.filterwarnings('ignore')
+
+# --- LOGGING: Sistema formal de registro de eventos ---
+#? Reemplazamos prints por logging para control de niveles y persistencia en archivo.
+LOG_DIR = Path.cwd() / 'logs'
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)-8s | %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_DIR / 'pipeline.log', mode='w', encoding='utf-8')
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# --- CONFIGURACIÓN EXTERNA: Parámetros centralizados ---
+#? Cargamos parámetros desde config.json para evitar valores hardcodeados.
+CONFIG_PATH = Path.cwd() / 'config.json'
+with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+    CONFIG = json.load(f)
+
+logger.info('=== INICIO DEL PIPELINE ===')
+logger.info(f'Proyecto: {CONFIG["proyecto"]} v{CONFIG["version"]}')
+logger.info(f'Python: {sys.version.split()[0]}')
+logger.info(f'Pandas: {pd.__version__}')
+logger.info(f'Numpy:  {np.__version__}')
+logger.info(f'Configuración cargada desde: {CONFIG_PATH.name}')
+
+"""### 1.2 Arquitectura de carpetas"""
+
+#? Rutas definidas en config.json: el proyecto corre en cualquier máquina sin editar paths.
+#? Separamos raw (intocable) de processed (generado) para trazabilidad.
+BASE_DIR = Path.cwd()
+RAW_DIR = BASE_DIR / CONFIG['rutas']['raw']
+PROCESSED_DIR = BASE_DIR / CONFIG['rutas']['processed']
+
+for directorio in [RAW_DIR, PROCESSED_DIR]:
+    directorio.mkdir(parents=True, exist_ok=True)
+
+logger.info('--- ESTRUCTURA DE CARPETAS ---')
+logger.info(f'Raw:       {RAW_DIR}')
+logger.info(f'Processed: {PROCESSED_DIR}')
+
+"""### 1.3 Funciones reutilizables"""
+
+#? Centralizamos lógica repetitiva en funciones para no duplicar código entre secciones.
+#? Cada función encapsula una validación que se aplica a múltiples DataFrames.
+
+def leer_archivo_seguro(ruta, tipo='csv', **kwargs):
+    """Lee CSV, Excel o JSON de forma robusta con logging."""
+    try:
+        if tipo == 'csv':
+            df = pd.read_csv(ruta, **kwargs)
+        elif tipo == 'excel':
+            df = pd.read_excel(ruta, **kwargs)
+        elif tipo == 'json':
+            df = pd.read_json(ruta, **kwargs)
+        else:
+            raise ValueError(f'Tipo no soportado: {tipo}')
+        logger.info(f'Archivo leído: {Path(ruta).name} ({len(df)} filas, {len(df.columns)} cols)')
+        return df
+    except Exception as e:
+        logger.error(f'Error leyendo {ruta}: {e}')
+        raise
+
+
+def validar_columnas(df, columnas_requeridas, nombre_df='DataFrame'):
+    """Falla temprano si faltan columnas esperadas."""
+    faltantes = [c for c in columnas_requeridas if c not in df.columns]
+    if faltantes:
+        logger.error(f'{nombre_df} sin columnas: {faltantes}')
+        raise ValueError(f'{nombre_df} sin columnas: {faltantes}')
+    logger.info(f'   \u2713 {nombre_df}: columnas validadas')
+    return True
+
+
+def detectar_duplicados(df, subset, nombre_df='DataFrame'):
+    """Reporta duplicados sobre un subset de columnas."""
+    dupes = df[df.duplicated(subset=subset, keep=False)]
+    n = len(dupes)
+    if n > 0:
+        logger.warning(f'{nombre_df}: {n} registros duplicados en {subset}')
+    else:
+        logger.info(f'   \u2713 {nombre_df}: 0 duplicados en {subset}')
+    return dupes
+
+
+def contar_nulos(df, columna, nombre_df='DataFrame'):
+    """Cuenta nulos en una columna y reporta porcentaje."""
+    n = df[columna].isna().sum()
+    pct = n / len(df) * 100
+    if n > 0:
+        logger.warning(f'{nombre_df} \u2192 {columna}: {n} nulos ({pct:.1f}%)')
+    else:
+        logger.info(f'   \u2713 {nombre_df} \u2192 {columna}: 0 nulos')
+    return n
+
+logger.info('--- FUNCIONES CARGADAS ---')
+logger.info('leer_archivo_seguro, validar_columnas, detectar_duplicados, contar_nulos')
+
+"""### 1.4 Pruebas unitarias automatizadas"""
+
+#? Pruebas unitarias: validamos las funciones críticas con datos sintéticos.
+#? Si alguna falla, el pipeline se detiene antes de procesar datos reales.
+import tempfile
+import os
+
+def ejecutar_pruebas():
+    """Suite de pruebas unitarias para funciones del pipeline."""
+    errores = []
+    pruebas_pasadas = 0
+
+    # --- Test 1: leer_archivo_seguro con CSV válido ---
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+            f.write('col_a,col_b\n1,2\n3,4\n')
+            tmp_path = f.name
+        df_test = leer_archivo_seguro(tmp_path, tipo='csv')
+        assert len(df_test) == 2, f'Esperado 2 filas, obtenido {len(df_test)}'
+        assert list(df_test.columns) == ['col_a', 'col_b'], 'Columnas incorrectas'
+        os.unlink(tmp_path)
+        pruebas_pasadas += 1
+    except AssertionError as e:
+        errores.append(f'test_leer_csv_valido: {e}')
+
+    # --- Test 2: leer_archivo_seguro con tipo inválido ---
+    try:
+        error_capturado = False
+        try:
+            leer_archivo_seguro('dummy.txt', tipo='xml')
+        except ValueError:
+            error_capturado = True
+        assert error_capturado, 'Debería lanzar ValueError para tipo no soportado'
+        pruebas_pasadas += 1
+    except AssertionError as e:
+        errores.append(f'test_leer_tipo_invalido: {e}')
+
+    # --- Test 3: validar_columnas con columnas presentes ---
+    try:
+        df_test = pd.DataFrame({'a': [1], 'b': [2], 'c': [3]})
+        resultado = validar_columnas(df_test, ['a', 'b'], 'Test')
+        assert resultado == True, 'Debería retornar True'
+        pruebas_pasadas += 1
+    except AssertionError as e:
+        errores.append(f'test_validar_columnas_ok: {e}')
+
+    # --- Test 4: validar_columnas con columnas faltantes ---
+    try:
+        df_test = pd.DataFrame({'a': [1], 'b': [2]})
+        error_capturado = False
+        try:
+            validar_columnas(df_test, ['a', 'x', 'y'], 'Test')
+        except ValueError:
+            error_capturado = True
+        assert error_capturado, 'Debería lanzar ValueError'
+        pruebas_pasadas += 1
+    except AssertionError as e:
+        errores.append(f'test_validar_columnas_faltantes: {e}')
+
+    # --- Test 5: detectar_duplicados ---
+    try:
+        df_test = pd.DataFrame({'id': [1, 2, 2, 3], 'val': ['a', 'b', 'c', 'd']})
+        dupes = detectar_duplicados(df_test, subset=['id'], nombre_df='Test')
+        assert len(dupes) == 2, f'Esperado 2 duplicados, obtenido {len(dupes)}'
+        pruebas_pasadas += 1
+    except AssertionError as e:
+        errores.append(f'test_detectar_duplicados: {e}')
+
+    # --- Test 6: detectar_duplicados sin duplicados ---
+    try:
+        df_test = pd.DataFrame({'id': [1, 2, 3], 'val': ['a', 'b', 'c']})
+        dupes = detectar_duplicados(df_test, subset=['id'], nombre_df='Test')
+        assert len(dupes) == 0, f'Esperado 0 duplicados, obtenido {len(dupes)}'
+        pruebas_pasadas += 1
+    except AssertionError as e:
+        errores.append(f'test_sin_duplicados: {e}')
+
+    # --- Test 7: contar_nulos con nulos ---
+    try:
+        df_test = pd.DataFrame({'score': [10, None, 30, None, 50]})
+        n = contar_nulos(df_test, 'score', 'Test')
+        assert n == 2, f'Esperado 2 nulos, obtenido {n}'
+        pruebas_pasadas += 1
+    except AssertionError as e:
+        errores.append(f'test_contar_nulos: {e}')
+
+    # --- Test 8: contar_nulos sin nulos ---
+    try:
+        df_test = pd.DataFrame({'score': [10, 20, 30]})
+        n = contar_nulos(df_test, 'score', 'Test')
+        assert n == 0, f'Esperado 0 nulos, obtenido {n}'
+        pruebas_pasadas += 1
+    except AssertionError as e:
+        errores.append(f'test_sin_nulos: {e}')
+
+    return pruebas_pasadas, errores
+
+# Ejecutar pruebas
+logger.info('=== PRUEBAS UNITARIAS ===')
+total_pasadas, errores_encontrados = ejecutar_pruebas()
+total_tests = total_pasadas + len(errores_encontrados)
+
+if errores_encontrados:
+    for err in errores_encontrados:
+        logger.error(f'FALLO: {err}')
+    raise RuntimeError(f'{len(errores_encontrados)}/{total_tests} pruebas fallaron. Pipeline detenido.')
+else:
+    logger.info(f'\u2713 {total_pasadas}/{total_tests} pruebas pasaron exitosamente')
+    logger.info('Pipeline validado para continuar.')
+
+#? Copiamos los archivos fuente al directorio raw para garantizar trazabilidad.
+#? Los nombres de archivos se obtienen de config.json.
+
+logger.info('--- COPIADO DE ARCHIVOS A RAW ---')
+archivos_fuente = CONFIG['archivos_fuente']
+
+for clave, nombre in archivos_fuente.items():
+    origen = BASE_DIR / nombre
+    destino = RAW_DIR / nombre
+    if origen.exists():
+        shutil.copy2(origen, destino)
+        logger.info(f'  \u2713 {nombre} copiado a {CONFIG["rutas"]["raw"]}/')
+    else:
+        logger.warning(f'  \u2717 {nombre} NO encontrado en {origen}')
+
+logger.info('--- FIN COPIADO ---')
+
+"""### 2.1 Lectura estructurada de datos"""
+
+#? Forzamos dtype str en IDs para evitar que pandas los interprete como numéricos y pierda ceros.
+#? Columnas requeridas se obtienen de config.json.
+
+logger.info('--- CARGA DE DATOS ---')
+
+# Catálogo maestro (Excel)
+ruta_catalogo = RAW_DIR / CONFIG['archivos_fuente']['catalogo']
+try:
+    df_catalogo = leer_archivo_seguro(
+        ruta_catalogo, tipo='excel', engine='openpyxl',
+        dtype={'id_estudiante': str}
+    )
+except Exception:
+    df_catalogo = leer_archivo_seguro(
+        ruta_catalogo, tipo='csv', sep=',',
+        dtype={'id_estudiante': str}
+    )
+
+columnas_catalogo = CONFIG['columnas_requeridas']['catalogo']
+validar_columnas(df_catalogo, columnas_catalogo, 'Cat\u00e1logo')
+
+#? Eliminamos duplicados en la llave primaria antes del merge.
+df_catalogo_limpio = df_catalogo.drop_duplicates(subset=['id_estudiante'])
+logger.info(f'   Cat\u00e1logo: {len(df_catalogo)} \u2192 {len(df_catalogo_limpio)} (sin duplicados)')
+
+# Entregas campus Matriz (CSV)
+df_matriz = leer_archivo_seguro(
+    RAW_DIR / CONFIG['archivos_fuente']['entregas_matriz'],
+    tipo='csv', sep=',',
+    dtype={'id_entrega': str, 'id_estudiante': str}
+)
+
+# Entregas campus Extensión (CSV)
+df_extension = leer_archivo_seguro(
+    RAW_DIR / CONFIG['archivos_fuente']['entregas_extension'],
+    tipo='csv', sep=',',
+    dtype={'id_entrega': str, 'id_estudiante': str}
+)
+
+columnas_entregas = CONFIG['columnas_requeridas']['entregas']
+validar_columnas(df_matriz, columnas_entregas, 'Matriz')
+validar_columnas(df_extension, columnas_entregas, 'Extensi\u00f3n')
+
+logger.info(f'   Matriz:    {df_matriz.shape}')
+logger.info(f'   Extensi\u00f3n: {df_extension.shape}')
+logger.info(f'   Cat\u00e1logo:  {df_catalogo_limpio.shape}')
+
+"""### 2.2 Integración estructural (concat)"""
+
+#? Concat: unimos DataFrames con esquema idéntico (mismas columnas, distinto origen).
+#? Agregamos columna 'campus' ANTES de concatenar para no perder el origen de cada fila.
+
+df_matriz['campus'] = 'matriz'
+df_extension['campus'] = 'extension'
+
+df_consolidado = pd.concat(
+    [df_matriz, df_extension],
+    ignore_index=True
+)
+
+#? Verificamos que no haya IDs de entrega repetidos entre campus.
+detectar_duplicados(df_consolidado, subset=['id_entrega'], nombre_df='Consolidado')
+
+logger.info(f'--- CONCAT ---')
+logger.info(f'Matriz ({len(df_matriz)}) + Extensi\u00f3n ({len(df_extension)}) = {len(df_consolidado)} registros')
+
+"""### 2.3 Integración relacional (merge)"""
+
+#? Merge left: conservamos TODAS las entregas aunque el estudiante no esté en el catálogo.
+#? validate='many_to_one': falla si el catálogo tiene claves duplicadas (detecta error upstream).
+#? indicator=True: nos permite auditar qué registros no encontraron match.
+
+df_integrado = pd.merge(
+    df_consolidado,
+    df_catalogo_limpio,
+    on='id_estudiante',
+    how='left',
+    validate='many_to_one',
+    indicator=True
+)
+
+logger.info('--- MERGE ---')
+logger.info(df_integrado['_merge'].value_counts().to_string())
+
+#? Huérfanos = entregas de estudiantes no matriculados. Los exportamos para auditoría.
+df_huerfanos = df_integrado[df_integrado['_merge'] == 'left_only']
+logger.info(f'Hu\u00e9rfanos: {len(df_huerfanos)} ({len(df_huerfanos)/len(df_integrado)*100:.1f}%)')
+
+archivos_exportados = []  # Inicializamos el contador global de archivos
+
+if len(df_huerfanos) > 0:
+    archivo_huerfanos = PROCESSED_DIR / f'huerfanos_{datetime.now().strftime("%Y%m%d")}.csv'
+    df_huerfanos.to_csv(archivo_huerfanos, index=False)
+    archivos_exportados.append(archivo_huerfanos.name)
+    logger.info(f'   Exportado \u2192 {archivo_huerfanos.name}')
+
+df_integrado = df_integrado.drop(columns=['_merge'])
+
+"""### 2.4 Validaciones adicionales y limpieza"""
+
+#? Identificamos nulos críticos en puntaje: pueden indicar entregas no calificadas.
+#? También buscamos inconsistencias lógicas entre estado y puntaje.
+
+logger.info('--- VALIDACIONES ---')
+nulos_puntaje = contar_nulos(df_integrado, 'puntaje_obtenido', 'Integrado')
+
+# Inconsistencias: Pendiente con puntaje o Revisión sin puntaje
+pendiente_con_nota = df_integrado[
+    (df_integrado['estado_entrega'] == 'Pendiente') &
+    (df_integrado['puntaje_obtenido'].notna())
+]
+revision_sin_nota = df_integrado[
+    (df_integrado['estado_entrega'] == 'Revisi\u00f3n') &
+    (df_integrado['puntaje_obtenido'].isna())
+]
+
+logger.info(f'   Pendiente CON puntaje (inconsistente): {len(pendiente_con_nota)}')
+logger.info(f'   Revisi\u00f3n SIN puntaje (inconsistente):  {len(revision_sin_nota)}')
+
+"""### 2.5 Análisis exploratorio y agregaciones"""
+
+#? Agregamos por múltiples ejes para entender la distribución de los datos.
+
+logger.info('--- DESCRIPTIVOS ---')
+logger.info('\n' + df_integrado['puntaje_obtenido'].describe().to_string())
+
+logger.info('--- PROMEDIO POR CAMPUS ---')
+logger.info('\n' + df_integrado.groupby('campus')['puntaje_obtenido'].mean().to_string())
+
+logger.info('--- ESTADO DE ENTREGAS ---')
+logger.info('\n' + df_integrado['estado_entrega'].value_counts().to_string())
+
+logger.info('--- TOP 5 ESTUDIANTES (promedio) ---')
+top5 = (df_integrado.groupby('id_estudiante')['puntaje_obtenido']
+        .mean().nlargest(5))
+logger.info('\n' + top5.to_string())
+
+logger.info('--- BOTTOM 5 ESTUDIANTES (promedio) ---')
+bottom5 = (df_integrado.groupby('id_estudiante')['puntaje_obtenido']
+           .mean().nsmallest(5))
+logger.info('\n' + bottom5.to_string())
+
+logger.info('--- PROMEDIO POR MATERIA ---')
+logger.info('\n' + df_integrado.groupby('materia')['puntaje_obtenido'].mean().sort_values(ascending=False).to_string())
+
+logger.info('--- PROMEDIO POR TIPO DE PROYECTO ---')
+logger.info('\n' + df_integrado.groupby('tipo_proyecto')['puntaje_obtenido'].mean().sort_values(ascending=False).to_string())
+
+"""### 2.6 Resumen analítico por estudiante"""
+
+#? Agrupamos por estudiante+campus para generar un perfil resumido por persona.
+#? La desviación estándar revela consistencia: un alumno con std alta es irregular.
+
+resumen_final = (df_integrado
+    .groupby(['id_estudiante', 'campus'])
+    .agg(
+        promedio=('puntaje_obtenido', 'mean'),
+        entregas=('id_entrega', 'count'),
+        desviacion=('puntaje_obtenido', 'std')
+    )
+    .reset_index()
+)
+
+logger.info('--- RESUMEN POR ESTUDIANTE ---')
+logger.info(f'Dimensiones: {resumen_final.shape}')
+logger.info('\n' + resumen_final.head(10).to_string(index=False))
+
+"""### 2.7 Indicadores de calidad del proceso"""
+
+#? Los indicadores auditan el pipeline: si alguno cambia entre ejecuciones, algo se rompió.
+#? MEJORA: Métricas de completitud, consistencia y unicidad detalladas.
+
+logger.info('=== INDICADORES DE CALIDAD DEL PROCESO ===')
+
+# --- Métricas básicas del pipeline ---
+indicadores_basicos = {
+    'archivos_procesados': len(CONFIG['archivos_fuente']),
+    'registros_catalogo': len(df_catalogo),
+    'registros_matriz': len(df_matriz),
+    'registros_extension': len(df_extension),
+    'registros_consolidados': len(df_consolidado),
+    'registros_integrados': len(df_integrado),
+    'duplicados_catalogo_eliminados': len(df_catalogo) - len(df_catalogo_limpio),
+    'claves_sin_correspondencia': len(df_huerfanos),
+    'nulos_puntaje_obtenido': nulos_puntaje,
+    'dimension_salida_filas': df_integrado.shape[0],
+    'dimension_salida_columnas': df_integrado.shape[1],
 }
+
+# --- COMPLETITUD: % de celdas no-nulas por columna ---
+logger.info('\n--- M\u00c9TRICAS DE COMPLETITUD ---')
+completitud = {}
+for col in df_integrado.columns:
+    no_nulos = df_integrado[col].notna().sum()
+    total = len(df_integrado)
+    pct = (no_nulos / total) * 100
+    completitud[f'completitud_{col}'] = round(pct, 2)
+    logger.info(f'   {col:.<35} {pct:.2f}%')
+
+completitud_global = sum(completitud.values()) / len(completitud)
+logger.info(f'   {"COMPLETITUD GLOBAL":.<35} {completitud_global:.2f}%')
+
+# --- CONSISTENCIA: Reglas de negocio ---
+logger.info('\n--- M\u00c9TRICAS DE CONSISTENCIA ---')
+puntaje_min = CONFIG['validaciones']['puntaje_minimo']
+puntaje_max = CONFIG['validaciones']['puntaje_maximo']
+estados_validos = CONFIG['validaciones']['estados_validos']
+
+# Puntajes fuera de rango
+fuera_rango = df_integrado[
+    (df_integrado['puntaje_obtenido'].notna()) &
+    ((df_integrado['puntaje_obtenido'] < puntaje_min) |
+     (df_integrado['puntaje_obtenido'] > puntaje_max))
+]
+# Estados inválidos
+estados_invalidos = df_integrado[
+    ~df_integrado['estado_entrega'].isin(estados_validos)
+]
+
+consistencia = {
+    'puntajes_fuera_rango': len(fuera_rango),
+    'estados_invalidos': len(estados_invalidos),
+    'pendiente_con_puntaje': len(pendiente_con_nota),
+    'revision_sin_puntaje': len(revision_sin_nota),
+    'consistencia_puntaje_pct': round((1 - len(fuera_rango) / len(df_integrado)) * 100, 2),
+    'consistencia_estados_pct': round((1 - len(estados_invalidos) / len(df_integrado)) * 100, 2),
+}
+
+for k, v in consistencia.items():
+    logger.info(f'   {k:.<35} {v}')
+
+# --- UNICIDAD: Valores \u00fanicos en columnas clave ---
+logger.info('\n--- M\u00c9TRICAS DE UNICIDAD ---')
+unicidad = {}
+for col in ['id_entrega', 'id_estudiante']:
+    total = len(df_integrado)
+    unicos = df_integrado[col].nunique()
+    duplicados = total - unicos
+    pct_unicidad = (unicos / total) * 100
+    unicidad[f'unicidad_{col}_unicos'] = unicos
+    unicidad[f'unicidad_{col}_duplicados'] = duplicados
+    unicidad[f'unicidad_{col}_pct'] = round(pct_unicidad, 2)
+    logger.info(f'   {col}: {unicos} \u00fanicos / {total} total ({pct_unicidad:.2f}% unicidad)')
+
+# --- Consolidar todos los indicadores ---
+indicadores = {
+    **indicadores_basicos,
+    'completitud_global_pct': round(completitud_global, 2),
+    **consistencia,
+    **unicidad,
+}
+
+logger.info('\n--- RESUMEN DE INDICADORES ---')
+for k, v in indicadores.items():
+    logger.info(f'   {k:.<40} {v}')
+
+"""### 2.8 Exportación de datos finales"""
+
+#? Exportamos en 3 formatos definidos en config.json para cubrir distintos consumidores.
+#? CSV: universal. JSON: APIs y NoSQL. Excel: usuarios no técnicos.
+
+stamp = datetime.now().strftime('%Y%m%d')
+formatos = CONFIG['formatos_exportacion']
+
+logger.info('--- EXPORTACI\u00d3N ---')
+
+# Dataset integrado
+for fmt in formatos:
+    nombre = PROCESSED_DIR / f'dataset_integrado_{stamp}.{fmt}'
+    if fmt == 'json':
+        df_integrado.to_json(nombre, orient='records', force_ascii=False, indent=2)
+    elif fmt == 'xlsx':
+        df_integrado.to_excel(nombre, index=False, engine='openpyxl')
+    else:
+        df_integrado.to_csv(nombre, index=False)
+    archivos_exportados.append(nombre.name)
+    logger.info(f'   \u2713 {nombre.name}')
+
+# Resumen por estudiante
+for fmt in formatos:
+    nombre = PROCESSED_DIR / f'resumen_estudiantes_{stamp}.{fmt}'
+    if fmt == 'json':
+        resumen_final.to_json(nombre, orient='records', force_ascii=False, indent=2)
+    elif fmt == 'xlsx':
+        resumen_final.to_excel(nombre, index=False, engine='openpyxl')
+    else:
+        resumen_final.to_csv(nombre, index=False)
+    archivos_exportados.append(nombre.name)
+    logger.info(f'   \u2713 {nombre.name}')
+
+# Exportar indicadores de calidad
+nombre_ind = PROCESSED_DIR / f'indicadores_calidad_{stamp}.csv'
+df_indicadores = pd.DataFrame([indicadores])
+df_indicadores.to_csv(nombre_ind, index=False)
+archivos_exportados.append(nombre_ind.name)
+logger.info(f'   \u2713 {nombre_ind.name}')
+
+# --- CORRECCI\u00d3N: archivos_generados se calcula din\u00e1micamente DESPU\u00c9S de la exportaci\u00f3n ---
+#? Contamos archivos reales en processed/ para garantía de auditoría consistente.
+archivos_reales = list(PROCESSED_DIR.glob('*'))
+indicadores['archivos_generados'] = len(archivos_reales)
+
+# Re-exportar indicadores con el valor correcto
+df_indicadores = pd.DataFrame([indicadores])
+df_indicadores.to_csv(nombre_ind, index=False)
+
+logger.info(f'\n   Total archivos generados: {len(archivos_reales)} (verificado en disco)')
+logger.info(f'   Archivos rastreados en pipeline: {len(archivos_exportados)}')
+logger.info('=== EXPORTACI\u00d3N COMPLETA ===')
+
+"""### 2.9 Estrategia de reproducibilidad"""
+
+#? Documentamos las condiciones para que otro analista reproduzca el resultado sin ayuda verbal.
+
+logger.info("""=== ESTRATEGIA DE REPRODUCIBILIDAD ===
+
+1. Entorno virtual:
+   python -m venv .venv
+   source .venv/bin/activate
+
+2. Dependencias (requirements.txt):
+   pandas>=2.2.2
+   numpy>=2.2.2
+   openpyxl>=3.1.5
+
+3. Configuraci\u00f3n externa:
+   - config.json: Par\u00e1metros centralizados del pipeline
+   - Modificar config.json para adaptar a otro entorno
+
+4. Control de versiones (Git):
+   - .gitignore: data/raw/*, data/processed/*, *.pyc, .venv/, .ipynb_checkpoints/, logs/
+   - Commits frecuentes con mensajes descriptivos
+
+5. Ejecuci\u00f3n:
+   - Rutas relativas (pathlib) \u2192 portable
+   - Para Colab: montar Drive y copiar archivos a data/raw/
+
+6. Validaci\u00f3n:
+   - Pruebas unitarias se ejecutan al inicio del pipeline
+   - Logging completo en logs/pipeline.log
+   - Indicadores de calidad exportados autom\u00e1ticamente
+
+7. Determinismo:
+   - Sin operaciones aleatorias
+   - Timestamps en nombres de archivos para trazabilidad
+""")
+
+logger.info('=== PIPELINE COMPLETADO EXITOSAMENTE ===')
+
+"""### 3.0 Reflexión final
+
+**¿Cómo contribuye el flujo propuesto a la claridad del análisis?**
+
+La separación en secciones (carga → validación → integración → análisis → exportación) permite leer el notebook como un documento lineal donde cada paso tiene un propósito claro. Las funciones reutilizables eliminan código repetido y hacen explícitas las reglas de validación que de otro modo quedarían implícitas en operaciones sueltas.
+
+**¿Qué decisiones favorecen la eficiencia del proceso?**
+
+Usar `validate='many_to_one'` en el merge detecta errores en el catálogo antes de que contaminen el dataset. Exportar en múltiples formatos con un loop evita código duplicado. Las rutas con pathlib y los timestamps en archivos eliminan la necesidad de renombrar manualmente.
+
+**¿Qué elementos garantizan la trazabilidad?**
+
+La columna 'campus' añadida antes del concat preserva el origen de cada fila. El indicador `_merge` identifica huérfanos. Los indicadores de calidad funcionan como un log de auditoría: si en la próxima corrida el número de huérfanos cambia de 5 a 20, sabemos que el catálogo se desactualizó.
+
+**¿Qué riesgos aparecerían si este proceso se hiciera manualmente en una hoja de cálculo?**
+
+Copiar y pegar entre hojas no deja registro de qué filas se unieron ni cuáles quedaron fuera. Un VLOOKUP roto falla silenciosamente devolviendo #N/A sin cuantificar el impacto. No hay versionamiento: si alguien sobrescribe el archivo, se pierde el estado anterior. Escalar a más campus o semestres implicaría repetir manualmente cada paso, multiplicando la probabilidad de error humano.
+"""
