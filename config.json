@@ -1,0 +1,29 @@
+{
+  "proyecto": "Taller 3 - Flujo Analítico Reproducible",
+  "version": "2.0",
+  "rutas": {
+    "raw": "data/raw",
+    "processed": "data/processed",
+    "logs": "logs"
+  },
+  "archivos_fuente": {
+    "catalogo": "estudiantes_master.xlsx",
+    "entregas_matriz": "entregas_campus_matriz.csv",
+    "entregas_extension": "entregas_campus_extension.csv"
+  },
+  "columnas_requeridas": {
+    "catalogo": ["id_estudiante", "nombre_completo", "campus_origen"],
+    "entregas": ["id_entrega", "id_estudiante", "fecha_subida", "materia", "tipo_proyecto", "puntaje_obtenido", "estado_entrega"]
+  },
+  "formatos_exportacion": ["csv", "json", "xlsx"],
+  "validaciones": {
+    "puntaje_minimo": 0,
+    "puntaje_maximo": 100,
+    "estados_validos": ["Aprobado", "Revisión", "Pendiente"]
+  },
+  "logging": {
+    "nivel": "INFO",
+    "archivo": "logs/pipeline.log",
+    "formato": "%(asctime)s | %(levelname)-8s | %(message)s"
+  }
+}
